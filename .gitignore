@@ -1,4 +1,6 @@
 _build
+/target
+/result
 **/*.swp
 **/*.*~
 **/tags.*

@@ -1,0 +1,22 @@
+[package]
+name = "vocalis"
+version = "1.0.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "A simple, modern sound recorder for GNOME"
+repository = "https://gitlab.gnome.org/World/vocalis"
+build = "build.rs"
+
+[features]
+default = []
+development = []
+
+[dependencies]
+adw = { package = "libadwaita", version = "0.9", features = ["v1_6"] }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_16"] }
+glib = "0.22"
+gio = "0.22"
+gettext-rs = { version = "0.8", features = ["gettext-system"] }
+
+[build-dependencies]
+glib-build-tools = "0.22"

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <template class="Gjs_Window" parent="AdwApplicationWindow">
+  <template class="VocalisWindow" parent="AdwApplicationWindow">
     <property name="width_request">360</property>
     <property name="height_request">480</property>
     <property name="hexpand">True</property>
