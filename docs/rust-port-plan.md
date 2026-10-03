@@ -684,6 +684,11 @@ Each item carries its resolution status from the implementation.
     Separately, the app's own icons are now bundled in the data gresource under
     `<resource-base-path>/icons/{scalable,symbolic}/apps/`; GTK auto-registers that path and uses
     the app-id icon as the default window icon (and for the empty-state `AdwStatusPage`).
+15. **Legacy dark-theme warning** — **resolved.** Non-GNOME environments (e.g. KDE's GTK config)
+    enable `GtkSettings:gtk-application-prefer-dark-theme`; on GTK < 4.23 libadwaita warns about
+    it while constructing `AdwStyleManager`. `Application::startup` now clears that legacy flag
+    before `parent_startup()` and drives theming via
+    `AdwStyleManager::default().set_color_scheme(ColorScheme::Default)` (follow the system).
 
 ---
 

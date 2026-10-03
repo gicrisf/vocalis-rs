@@ -23,7 +23,18 @@ mod imp {
 
     impl ApplicationImpl for Application {
         fn startup(&self) {
+            // Some environments (e.g. KDE's GTK config) still enable the legacy
+            // `gtk-application-prefer-dark-theme`, which libadwaita warns about.
+            // Clear it before libadwaita constructs its style manager, and drive
+            // theming through `AdwStyleManager:color-scheme` instead.
+            gtk::init().expect("Failed to initialize GTK");
+            if let Some(settings) = gtk::Settings::default() {
+                settings.set_gtk_application_prefer_dark_theme(false);
+            }
+
             self.parent_startup();
+
+            adw::StyleManager::default().set_color_scheme(adw::ColorScheme::Default);
 
             gst::init().expect("Failed to initialize GStreamer");
 
