@@ -137,56 +137,69 @@ mod imp {
             self.setup_actions(recording);
 
             let waveform = self.waveform.borrow().clone().unwrap();
-            let row = self.obj().downgrade();
-            waveform.connect_local("gesture-pressed", false, move |_| {
-                if let Some(row) = row.upgrade() {
-                    if let Some(action) = row.imp().pause_action.borrow().as_ref() {
-                        action.activate(None);
+            waveform.connect_local(
+                "gesture-pressed",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = row)]
+                    self.obj(),
+                    #[upgrade_or]
+                    None,
+                    move |_| {
+                        if let Some(action) = row.imp().pause_action.borrow().as_ref() {
+                            action.activate(None);
+                        }
+                        None
                     }
-                }
-                None
-            });
+                ),
+            );
 
             let controller = gtk::EventControllerKey::new();
-            let row = self.obj().downgrade();
-            controller.connect_key_pressed(move |_controller, key, _code, _state| {
-                if let Some(row) = row.upgrade() {
+            controller.connect_key_pressed(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                #[upgrade_or]
+                glib::Propagation::Proceed,
+                move |_controller, key, _code, _state| {
                     let imp = row.imp();
                     imp.entry.remove_css_class("error");
                     if key == gdk::Key::Escape {
                         imp.set_edit_mode(false);
                     }
+                    glib::Propagation::Proceed
                 }
-                glib::Propagation::Proceed
-            });
+            ));
             self.entry.add_controller(controller.clone());
             *self.key_controller.borrow_mut() = Some(controller);
 
-            let row = self.obj().downgrade();
-            self.entry.connect_activate(move |_| {
-                if let Some(row) = row.upgrade() {
+            self.entry.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_| {
                     if let Some(action) = row.imp().save_rename_action.borrow().as_ref() {
                         action.activate(None);
                     }
                 }
-            });
+            ));
 
-            let row = self.obj().downgrade();
-            recording.connect_peaks_updated(move |recording| {
-                if let Some(row) = row.upgrade() {
+            recording.connect_peaks_updated(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |recording| {
                     row.imp().waveform_stack.set_visible_child_name("wave");
                     if let Some(waveform) = row.imp().waveform.borrow().as_ref() {
                         waveform.set_peaks(recording.peaks());
                     }
                 }
-            });
+            ));
 
-            let row = self.obj().downgrade();
-            recording.connect_peaks_loading(move |_recording| {
-                if let Some(row) = row.upgrade() {
+            recording.connect_peaks_loading(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_recording| {
                     row.imp().waveform_stack.set_visible_child_name("loading");
                 }
-            });
+            ));
 
             self.playback_controls
                 .set_direction(gtk::TextDirection::Ltr);
@@ -203,36 +216,39 @@ mod imp {
             let group = gio::SimpleActionGroup::new();
 
             let export_action = gio::SimpleAction::new("export", None);
-            let row = self.obj().downgrade();
-            export_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            export_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.imp().on_export();
                 }
-            });
+            ));
             group.add_action(&export_action);
 
             let save_rename_action = gio::SimpleAction::new("save", None);
             save_rename_action.set_enabled(false);
-            let row = self.obj().downgrade();
-            save_rename_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            save_rename_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.imp().on_rename();
                 }
-            });
+            ));
             group.add_action(&save_rename_action);
 
             let rename_action = gio::SimpleAction::new("rename", None);
             rename_action.set_enabled(true);
-            let row = self.obj().downgrade();
-            rename_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            rename_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     let imp = row.imp();
                     imp.set_edit_mode(true);
                     if let Some(action) = imp.rename_action.borrow().as_ref() {
                         action.set_enabled(false);
                     }
                 }
-            });
+            ));
             rename_action
                 .bind_property("enabled", &save_rename_action, "enabled")
                 .flags(glib::BindingFlags::INVERT_BOOLEAN)
@@ -241,52 +257,57 @@ mod imp {
 
             let pause_action = gio::SimpleAction::new("pause", None);
             pause_action.set_enabled(false);
-            let row = self.obj().downgrade();
-            pause_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            pause_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.emit_by_name::<()>("pause", &[]);
                     row.imp().set_state(RowState::Paused);
                 }
-            });
+            ));
             group.add_action(&pause_action);
 
             let play_action = gio::SimpleAction::new("play", None);
             play_action.set_enabled(true);
             let uri = recording.uri();
-            let row = self.obj().downgrade();
-            play_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            play_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.emit_by_name::<()>("play", &[&uri]);
                     row.imp().set_state(RowState::Playing);
                 }
-            });
+            ));
             group.add_action(&play_action);
 
             let delete_action = gio::SimpleAction::new("delete", None);
-            let row = self.obj().downgrade();
-            delete_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            delete_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.emit_by_name::<()>("deleted", &[]);
                 }
-            });
+            ));
             group.add_action(&delete_action);
 
             let seek_back_action = gio::SimpleAction::new("seek-backward", None);
-            let row = self.obj().downgrade();
-            seek_back_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            seek_back_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.emit_by_name::<()>("seek-backward", &[]);
                 }
-            });
+            ));
             group.add_action(&seek_back_action);
 
             let seek_forward_action = gio::SimpleAction::new("seek-forward", None);
-            let row = self.obj().downgrade();
-            seek_forward_action.connect_activate(move |_, _| {
-                if let Some(row) = row.upgrade() {
+            seek_forward_action.connect_activate(glib::clone!(
+                #[weak(rename_to = row)]
+                self.obj(),
+                move |_, _| {
                     row.emit_by_name::<()>("seek-forward", &[]);
                 }
-            });
+            ));
             group.add_action(&seek_forward_action);
 
             // The "recording" group is inserted on the toplevel window by

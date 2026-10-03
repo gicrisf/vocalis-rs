@@ -107,48 +107,53 @@ mod imp {
 
             let start = gio::SimpleAction::new("start", None);
             start.set_enabled(true);
-            let widget = self.obj().downgrade();
-            start.connect_activate(move |_, _| {
-                if let Some(widget) = widget.upgrade() {
+            start.connect_activate(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_, _| {
                     widget.imp().on_start();
                 }
-            });
+            ));
             group.add_action(&start);
 
             let pause = gio::SimpleAction::new("pause", None);
-            let widget = self.obj().downgrade();
-            pause.connect_activate(move |_, _| {
-                if let Some(widget) = widget.upgrade() {
+            pause.connect_activate(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_, _| {
                     widget.imp().on_pause();
                 }
-            });
+            ));
             group.add_action(&pause);
 
             let stop = gio::SimpleAction::new("stop", None);
-            let widget = self.obj().downgrade();
-            stop.connect_activate(move |_, _| {
-                if let Some(widget) = widget.upgrade() {
+            stop.connect_activate(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_, _| {
                     widget.imp().on_stop();
                 }
-            });
+            ));
             group.add_action(&stop);
 
             let resume = gio::SimpleAction::new("resume", None);
-            let widget = self.obj().downgrade();
-            resume.connect_activate(move |_, _| {
-                if let Some(widget) = widget.upgrade() {
+            resume.connect_activate(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_, _| {
                     widget.imp().on_resume();
                 }
-            });
+            ));
             group.add_action(&resume);
 
             let cancel = gio::SimpleAction::new("cancel", None);
-            let widget = self.obj().downgrade();
-            cancel.connect_activate(move |_, _| {
-                if let Some(widget) = widget.upgrade() {
+            cancel.connect_activate(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_, _| {
                     widget.imp().on_cancel();
                 }
-            });
+            ));
             group.add_action(&cancel);
 
             start

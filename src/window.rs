@@ -118,26 +118,29 @@ mod imp {
             self.obj()
                 .insert_action_group("recorder", Some(&widget.actions_group()));
 
-            let window = self.obj().downgrade();
-            widget.connect_started(move |_| {
-                if let Some(window) = window.upgrade() {
+            widget.connect_started(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_| {
                     window.imp().on_recorder_started();
                 }
-            });
+            ));
 
-            let window = self.obj().downgrade();
-            widget.connect_canceled(move |_| {
-                if let Some(window) = window.upgrade() {
+            widget.connect_canceled(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_| {
                     window.imp().on_recorder_canceled();
                 }
-            });
+            ));
 
-            let window = self.obj().downgrade();
-            widget.connect_stopped(move |_, recording| {
-                if let Some(window) = window.upgrade() {
+            widget.connect_stopped(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_, recording| {
                     window.imp().on_recorder_stopped(recording);
                 }
-            });
+            ));
 
             *self.recorder.borrow_mut() = Some(recorder);
             *self.recorder_widget.borrow_mut() = Some(widget);
@@ -153,9 +156,10 @@ mod imp {
             let list_widget = RecordingsListWidget::new(recording_list.store(), &player);
             self.column.set_child(Some(&list_widget));
 
-            let window = self.obj().downgrade();
-            list_widget.connect_row_deleted(move |_widget, recording, index| {
-                if let Some(window) = window.upgrade() {
+            list_widget.connect_row_deleted(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_widget, recording, index| {
                     let imp = window.imp();
                     if let Some(list) = imp.recording_list.borrow().as_ref() {
                         list.store().remove(index);
@@ -169,23 +173,22 @@ mod imp {
                     };
                     imp.send_notification(&message, recording, index);
                 }
-            });
+            ));
 
-            let window = self.obj().downgrade();
-            let items_signal_id = recording_list.store().connect_items_changed(
+            let items_signal_id = recording_list.store().connect_items_changed(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
                 move |store, _position, _removed, _added| {
-                    if let Some(window) = window.upgrade() {
-                        let imp = window.imp();
-                        if imp.state.get() != WindowState::Recorder {
-                            if store.n_items() == 0 {
-                                imp.set_state(WindowState::Empty);
-                            } else {
-                                imp.set_state(WindowState::List);
-                            }
+                    let imp = window.imp();
+                    if imp.state.get() != WindowState::Recorder {
+                        if store.n_items() == 0 {
+                            imp.set_state(WindowState::Empty);
+                        } else {
+                            imp.set_state(WindowState::List);
                         }
                     }
-                },
-            );
+                }
+            ));
 
             let undo_action = gio::SimpleAction::new("undo", None);
             self.obj().add_action(&undo_action);
@@ -203,21 +206,23 @@ mod imp {
 
             // Context-dependent transport keys (see Application::init_actions).
             let play_pause_action = gio::SimpleAction::new("play-pause", None);
-            let window = self.obj().downgrade();
-            play_pause_action.connect_activate(move |_, _| {
-                if let Some(window) = window.upgrade() {
+            play_pause_action.connect_activate(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_, _| {
                     window.imp().on_play_pause();
                 }
-            });
+            ));
             self.obj().add_action(&play_pause_action);
 
             let delete_recording_action = gio::SimpleAction::new("delete-recording", None);
-            let window = self.obj().downgrade();
-            delete_recording_action.connect_activate(move |_, _| {
-                if let Some(window) = window.upgrade() {
+            delete_recording_action.connect_activate(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_, _| {
                     window.imp().on_delete_recording();
                 }
-            });
+            ));
             self.obj().add_action(&delete_recording_action);
 
             *self.player.borrow_mut() = Some(player);
@@ -327,10 +332,11 @@ mod imp {
             let toast = adw::Toast::new(message);
             let title = toast.title();
 
-            let window = self.obj().downgrade();
             let dismiss_recording = recording.clone();
-            toast.connect_dismissed(move |_toast| {
-                if let Some(window) = window.upgrade() {
+            toast.connect_dismissed(glib::clone!(
+                #[weak(rename_to = window)]
+                self.obj(),
+                move |_toast| {
                     let imp = window.imp();
                     if !imp.toast_undo.get() {
                         dismiss_recording.delete();
@@ -340,24 +346,25 @@ mod imp {
                         .borrow_mut()
                         .retain(|toast| toast.title() != title);
                 }
-            });
+            ));
 
             if let Some(undo_action) = self.undo_action.borrow().as_ref() {
                 if let Some(id) = self.undo_signal_id.borrow_mut().take() {
                     undo_action.disconnect(id);
                 }
 
-                let window = self.obj().downgrade();
                 let undo_recording = recording.clone();
-                let id = undo_action.connect_activate(move |_, _| {
-                    if let Some(window) = window.upgrade() {
+                let id = undo_action.connect_activate(glib::clone!(
+                    #[weak(rename_to = window)]
+                    self.obj(),
+                    move |_, _| {
                         let imp = window.imp();
                         if let Some(list) = imp.recording_list.borrow().as_ref() {
                             list.store().insert(index, &undo_recording);
                         }
                         imp.toast_undo.set(true);
                     }
-                });
+                ));
                 *self.undo_signal_id.borrow_mut() = Some(id);
             }
 

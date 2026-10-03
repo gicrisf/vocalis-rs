@@ -70,78 +70,101 @@ mod imp {
                 }
             });
 
-            let widget = self.obj().downgrade();
-            list.bind_model(Some(model), move |item| {
-                let recording = item
-                    .clone()
-                    .downcast::<Recording>()
-                    .expect("model item is not a Recording");
-                let row = Row::new(&recording);
+            list.bind_model(
+                Some(model),
+                glib::clone!(
+                    #[weak_allow_none(rename_to = widget)]
+                    self.obj(),
+                    move |item| {
+                        let recording = item
+                            .clone()
+                            .downcast::<Recording>()
+                            .expect("model item is not a Recording");
+                        let row = Row::new(&recording);
 
-                let Some(widget) = widget.upgrade() else {
-                    return row.upcast();
-                };
+                        if let Some(widget) = widget.as_ref() {
+                            widget.imp().wire_row(&row, &recording);
+                        }
 
-                widget.imp().wire_row(&row, &recording);
+                        row.upcast()
+                    }
+                ),
+            );
 
-                row.upcast()
-            });
-
-            let widget = self.obj().downgrade();
-            list.connect_row_activated(move |_list, row| {
-                if let (Some(widget), Ok(row)) = (widget.upgrade(), row.clone().downcast::<Row>()) {
-                    widget.imp().on_row_activated(&row);
+            list.connect_row_activated(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_list, row| {
+                    if let Ok(row) = row.clone().downcast::<Row>() {
+                        widget.imp().on_row_activated(&row);
+                    }
                 }
-            });
+            ));
         }
 
         fn wire_row(&self, row: &Row, recording: &Recording) {
-            let widget = self.obj().downgrade();
-
-            let row_weak = row.downgrade();
             let uri = recording.uri();
-            row.waveform()
-                .connect_local("gesture-pressed", false, move |_| {
-                    if let (Some(widget), Some(row)) = (widget.upgrade(), row_weak.upgrade()) {
+            let row_obj = row.clone();
+            row.waveform().connect_local(
+                "gesture-pressed",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = widget)]
+                    self.obj(),
+                    #[weak]
+                    row_obj,
+                    #[upgrade_or]
+                    None,
+                    move |_| {
                         let imp = widget.imp();
                         let is_same = imp
                             .active_playing_row
                             .borrow()
                             .as_ref()
-                            .is_some_and(|active| active.as_ptr() == row.as_ptr());
+                            .is_some_and(|active| active.as_ptr() == row_obj.as_ptr());
                         if !is_same {
                             if let Some(active) = imp.active_playing_row.borrow().as_ref() {
                                 active.waveform().set_position_value(0.0);
                             }
-                            *imp.active_playing_row.borrow_mut() = Some(row.clone());
+                            *imp.active_playing_row.borrow_mut() = Some(row_obj.clone());
                             if let Some(player) = imp.player.borrow().as_ref() {
                                 player.set_uri(Some(&uri));
                             }
                         }
+                        None
                     }
-                    None
-                });
+                ),
+            );
 
-            let widget = self.obj().downgrade();
-            let row_weak = row.downgrade();
-            row.waveform()
-                .connect_local("position-changed", false, move |values| {
-                    if let (Some(widget), Some(row)) = (widget.upgrade(), row_weak.upgrade()) {
+            let row_obj = row.clone();
+            row.waveform().connect_local(
+                "position-changed",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = widget)]
+                    self.obj(),
+                    #[weak]
+                    row_obj,
+                    #[upgrade_or]
+                    None,
+                    move |values| {
                         let position = values[1].get::<f64>().unwrap_or(0.0);
-                        let duration = row.recording().duration();
+                        let duration = row_obj.recording().duration();
                         if let Some(player) = widget.imp().player.borrow().as_ref() {
                             player.seek(gst::ClockTime::from_nseconds(
                                 (position * duration as f64) as u64,
                             ));
                         }
+                        None
                     }
-                    None
-                });
+                ),
+            );
 
-            let widget = self.obj().downgrade();
             let uri = recording.uri();
-            row.connect_play(move |row, _uri| {
-                if let Some(widget) = widget.upgrade() {
+            row.connect_play(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |row, _uri| {
                     let imp = widget.imp();
                     let player = imp.player.borrow().clone();
                     if let Some(player) = player {
@@ -159,38 +182,42 @@ mod imp {
                         player.play();
                     }
                 }
-            });
+            ));
 
-            let widget = self.obj().downgrade();
-            row.connect_pause(move |_row| {
-                if let Some(widget) = widget.upgrade() {
+            row.connect_pause(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |_row| {
                     if let Some(player) = widget.imp().player.borrow().as_ref() {
                         player.pause();
                     }
                 }
-            });
+            ));
 
-            let widget = self.obj().downgrade();
-            row.connect_seek_backward(move |row| {
-                if let Some(widget) = widget.upgrade() {
+            row.connect_seek_backward(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |row| {
                     if let Some(player) = widget.imp().player.borrow().as_ref() {
                         seek_by(player, row, -10);
                     }
                 }
-            });
+            ));
 
-            let widget = self.obj().downgrade();
-            row.connect_seek_forward(move |row| {
-                if let Some(widget) = widget.upgrade() {
+            row.connect_seek_forward(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |row| {
                     if let Some(player) = widget.imp().player.borrow().as_ref() {
                         seek_by(player, row, 10);
                     }
                 }
-            });
+            ));
 
-            let widget = self.obj().downgrade();
-            row.connect_deleted(move |row| {
-                if let Some(widget) = widget.upgrade() {
+            row.connect_deleted(glib::clone!(
+                #[weak(rename_to = widget)]
+                self.obj(),
+                move |row| {
                     let imp = widget.imp();
 
                     let is_active = imp
@@ -220,7 +247,7 @@ mod imp {
                     imp.obj()
                         .emit_by_name::<()>("row-deleted", &[&row.recording(), &(index as u32)]);
                 }
-            });
+            ));
         }
 
         fn on_state_changed(&self, state: gst_player::PlayerState) {

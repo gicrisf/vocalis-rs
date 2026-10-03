@@ -229,17 +229,19 @@ impl WaveForm {
     fn setup_drag_gesture(&self) {
         let gesture = gtk::GestureDrag::new();
 
-        let obj = self.downgrade();
-        gesture.connect_drag_begin(move |gesture, _, _| {
-            gesture.set_state(gtk::EventSequenceState::Claimed);
-            if let Some(obj) = obj.upgrade() {
+        gesture.connect_drag_begin(glib::clone!(
+            #[weak(rename_to = obj)]
+            self,
+            move |gesture, _, _| {
+                gesture.set_state(gtk::EventSequenceState::Claimed);
                 obj.emit_by_name::<()>("gesture-pressed", &[]);
             }
-        });
+        ));
 
-        let obj = self.downgrade();
-        gesture.connect_drag_update(move |_gesture, offset_x, _offset_y| {
-            if let Some(obj) = obj.upgrade() {
+        gesture.connect_drag_update(glib::clone!(
+            #[weak(rename_to = obj)]
+            self,
+            move |_gesture, offset_x, _offset_y| {
                 let imp = obj.imp();
                 if let Some(last_x) = imp.last_x.get() {
                     let value = imp.clamped(offset_x + last_x);
@@ -247,17 +249,18 @@ impl WaveForm {
                     obj.queue_draw();
                 }
             }
-        });
+        ));
 
-        let obj = self.downgrade();
-        gesture.connect_drag_end(move |_gesture, _offset_x, _offset_y| {
-            if let Some(obj) = obj.upgrade() {
+        gesture.connect_drag_end(glib::clone!(
+            #[weak(rename_to = obj)]
+            self,
+            move |_gesture, _offset_x, _offset_y| {
                 let imp = obj.imp();
                 imp.last_x.set(Some(imp.position.get()));
                 let position = imp.position();
                 obj.emit_by_name::<()>("position-changed", &[&position]);
             }
-        });
+        ));
 
         self.add_controller(gesture);
     }
