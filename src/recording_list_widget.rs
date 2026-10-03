@@ -226,8 +226,9 @@ mod imp {
         fn on_state_changed(&self, state: gst_player::PlayerState) {
             if state == gst_player::PlayerState::Stopped {
                 if let Some(row) = self.active_playing_row.borrow().as_ref() {
+                    // Leave the waveform where it stopped (e.g. at the end after a
+                    // forward seek or EOS). Switching rows resets it explicitly.
                     row.set_state(RowState::Paused);
-                    row.waveform().set_position_value(0.0);
                 }
             } else if state == gst_player::PlayerState::Playing {
                 if let Some(row) = self.active_playing_row.borrow().as_ref() {
@@ -421,18 +422,15 @@ impl RecordingsListWidget {
 
 fn seek_by(player: &gst_player::Player, row: &Row, seconds: i64) {
     let position = player.position().unwrap_or(gst::ClockTime::ZERO).nseconds() as i64;
-    let duration = row.recording().duration();
+    let duration = row.recording().duration().max(0);
     let ten = 10_000_000_000i64;
     let candidate = if seconds < 0 {
-        (position - ten).max(0)
+        position - ten
     } else {
         position + ten
     };
-    let target = if candidate < 0 || candidate > duration {
-        0
-    } else {
-        candidate
-    };
+    // Clamp at both ends (no wrap-around); identical while playing or paused.
+    let target = candidate.clamp(0, duration);
     player.seek(gst::ClockTime::from_nseconds(target as u64));
 
     // `position-updated` doesn't fire while the player is paused, so reflect the

@@ -91,6 +91,11 @@ packaging are implemented and verified to build/run. M6 is a parity/interactive-
 14. **Paused seek updates the waveform.** Upstream only refreshed the waveform from the player's
     `position-updated` signal, which doesn't fire while paused, so ±10 s seeks moved the player
     position but not the UI. `seek_by` now sets the row's waveform position directly after seeking.
+15. **±10 s seek clamps at both ends (no wrap).** Upstream was asymmetric: backward was clamped to
+    0, but forward past the end wrapped to 0 (the shared `position < 0 || position > duration ? 0`
+    expression). It now clamps both ways (`candidate.clamp(0, duration)`), identical while playing
+    or paused. To keep the two states identical, stopping (EOS or seek to the end) no longer resets
+    the waveform to 0 — it stays at the end; explicit resets still happen when switching rows.
 
 ---
 
