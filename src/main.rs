@@ -1,5 +1,9 @@
 mod application;
 mod config;
+mod recorder;
+mod recorder_widget;
+mod utils;
+mod waveform;
 mod window;
 
 use gtk::prelude::*;

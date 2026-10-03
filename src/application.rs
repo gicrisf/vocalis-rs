@@ -25,6 +25,8 @@ mod imp {
         fn startup(&self) {
             self.parent_startup();
 
+            gst::init().expect("Failed to initialize GStreamer");
+
             let app = self.obj();
             config::init_user_directory(&config::recordings_dir());
             config::init_user_directory(&config::cache_dir());
