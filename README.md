@@ -6,9 +6,7 @@ A simple, modern sound recorder for GNOME.
 [`gtk4-rs`](https://gtk-rs.org/) and [`libadwaita`](https://gitlab.gnome.org/World/Rust/libadwaita-rs).
 The port is functionally complete.
 
-<div align="center">
 ![screenshot](data/resources/screenshots/screenshot1.png)
-</div>
 
 ### Quick start (NixOS)
 
