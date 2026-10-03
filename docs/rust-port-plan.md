@@ -83,8 +83,11 @@ packaging are implemented and verified to build/run. M6 is a parity/interactive-
     **regardless of its enabled state** — so binding `space` to both `recorder.pause/resume` and
     `recording.play/pause` could never fall through. They now map to single `win.play-pause` /
     `win.delete-recording` actions that dispatch on the window state (recorder pause/resume, or the
-    active row's play/pause/delete). `RecorderWidget` also now starts in the `Stopped` state so
-    `pause`/`stop`/`resume`/`cancel` are disabled before recording.
+    active row's play/pause/delete). `win.play-pause` always targets the **active (expanded)** row
+    (consistent with `b`/`n`/`Delete`): if the active row is playing it pauses; otherwise it plays
+    the active row, stopping whichever row was playing first (via `connect_play`). `RecorderWidget`
+    also now starts in the `Stopped` state so `pause`/`stop`/`resume`/`cancel` are disabled before
+    recording.
 
 ---
 
@@ -572,8 +575,8 @@ Port is "done" when all of the following match the TS app. Markers: `[x]` verifi
 - [~] Keyboard shortcuts (application.ts:111-128) including `F10`, `Ctrl+?`, `Ctrl+Q`, space, `s`,
       Delete, F2, `Ctrl+S`, `b`/`n`. (All registered. `recording.*` shortcuts now work from
       anywhere via the hoisted active-row action group, and `space`/`Delete` are dispatched by
-      `win.*` actions to avoid the recorder/playback accelerator collision — see §0.1.12–13.
-      Needs interactive re-check.)
+      `win.*` actions to avoid the recorder/playback accelerator collision; `space` targets the
+      active/expanded row — see §0.1.12–13. Needs interactive re-check.)
 - [x] Missing-plugin and error logging paths. (Implemented; not triggered during tests.)
 - [x] Translations load (gettext domain = app id) and markup time strings render.
       (64 `.mo` locales installed by the flake; `format_time` emits the same markup.)

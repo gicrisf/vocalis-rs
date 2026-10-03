@@ -303,11 +303,14 @@ mod imp {
 
         /// Toggle play/pause on the active row (used by the `win.play-pause` action).
         pub fn toggle_playback(&self) {
+            // Always act on the active (expanded) row: if a different row is
+            // playing, activating this row's `play` stops it and starts the
+            // active one (handled by `connect_play`).
             let row = self
-                .active_playing_row
+                .active_row
                 .borrow()
                 .clone()
-                .or_else(|| self.active_row.borrow().clone());
+                .or_else(|| self.active_playing_row.borrow().clone());
             if let Some(row) = row {
                 if let Some(group) = row.action_group() {
                     for name in ["pause", "play"] {
