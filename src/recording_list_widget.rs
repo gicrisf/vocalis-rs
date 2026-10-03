@@ -434,4 +434,11 @@ fn seek_by(player: &gst_player::Player, row: &Row, seconds: i64) {
         candidate
     };
     player.seek(gst::ClockTime::from_nseconds(target as u64));
+
+    // `position-updated` doesn't fire while the player is paused, so reflect the
+    // new position in the waveform immediately.
+    if duration > 0 {
+        row.waveform()
+            .set_position_value(target as f64 / duration as f64);
+    }
 }

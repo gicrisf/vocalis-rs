@@ -88,6 +88,9 @@ packaging are implemented and verified to build/run. M6 is a parity/interactive-
     the active row, stopping whichever row was playing first (via `connect_play`). `RecorderWidget`
     also now starts in the `Stopped` state so `pause`/`stop`/`resume`/`cancel` are disabled before
     recording.
+14. **Paused seek updates the waveform.** Upstream only refreshed the waveform from the player's
+    `position-updated` signal, which doesn't fire while paused, so ±10 s seeks moved the player
+    position but not the UI. `seek_by` now sets the row's waveform position directly after seeking.
 
 ---
 
