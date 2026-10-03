@@ -1,41 +1,49 @@
 # Vocalis
 
-A simple, modern sound recorder for GNOME
+A simple, modern sound recorder for GNOME.
 
-<a href="https://flathub.org/apps/details/org.gnome.SoundRecorder">
-<img src="https://flathub.org/assets/badges/flathub-badge-i-en.png" width="190px" />
-</a>
+**This is a Rust port of Vocalis** (originally a GJS/TypeScript app), built with
+[`gtk4-rs`](https://gtk-rs.org/) and [`libadwaita`](https://gitlab.gnome.org/World/Rust/libadwaita-rs).
+The port is functionally complete.
 
 <div align="center">
 ![screenshot](data/resources/screenshots/screenshot1.png)
 </div>
 
-### Useful links
-
-Report issues: https://gitlab.gnome.org/World/vocalis/issues/
-
-Translate: https://wiki.gnome.org/TranslationProject
-
-You can also join us in [#sound-recorder:gnome.org on Matrix](https://matrix.to/#/#sound-recorder:gnome.org)
-
-### Hacking on Vocalis
-
-This is a Rust (`gtk4-rs` / `libadwaita`) port of Vocalis. Development uses the Nix flake:
+### Quick start (NixOS)
 
 ```sh
-nix develop              # toolchain + GTK/Adw/GStreamer + GSettings schemas + icon theme
-cargo run                # build and run
-cargo clippy --all-targets
-cargo test               # note: the recorder integration test is #[ignore] (needs a mic)
-nix build                # build the wrapped package → result/bin/vocalis
-nix run .#               # run the packaged app
+nix run .#                 # run the packaged app
+nix build                  # build → result/bin/vocalis
+nix profile install .#     # install (also makes the desktop/titlebar icon resolvable)
 ```
 
-See [`docs/rust-port-plan.md`](docs/rust-port-plan.md) for the port plan and status.
+### Hacking
+
+Development uses the Nix flake for the full toolchain (Rust, GTK4, libadwaita, GStreamer,
+GSettings schemas, and an icon theme):
+
+```sh
+nix develop                # enter the dev shell
+cargo run                  # build and run
+cargo fmt --check
+cargo clippy --all-targets
+cargo test                 # note: the recorder integration test is #[ignore] (needs a mic)
+```
+
+Requirements (all provided by `nix develop`): Rust, GTK ≥ 4.16, libadwaita ≥ 1.6,
+GStreamer ≥ 1.20. Linux only.
+
+#### Profiles
+
+- `default` → application id `app.drey.Vocalis`
+- `development` → application id `app.drey.Vocalis.Devel` (Cargo: `--features development`)
+
+They use separate GSettings and XDG data/cache directories, so both can run side by side.
 
 ### Translations, Flatpak and CI
 
-A thin Meson layer drives the same Cargo build and handles i18n, installation and the
+A thin Meson layer drives the same Cargo build and handles i18n, installation, and the
 Flatpak/CI integration:
 
 ```sh
@@ -47,6 +55,24 @@ meson compile -C build-meson app.drey.Vocalis-pot        # regenerate the .pot
 meson compile -C build-meson app.drey.Vocalis-update-po  # merge into po/*.po
 ```
 
-- Flatpak manifest: `build-aux/app.drey.Vocalis.Devel.json` (`buildsystem: meson`).
-- CI: `.gitlab-ci.yml` (cargo checks + GNOME Flatpak CI templates).
+Flatpak (currently targets the GNOME nightly runtime; not validated yet):
 
+```sh
+flatpak-builder --user --install --force-clean build-flatpak \
+  build-aux/app.drey.Vocalis.Devel.json
+```
+
+CI: `.gitlab-ci.yml` (Cargo checks + GNOME Flatpak CI templates).
+
+### Links
+
+- Upstream (GJS original): https://gitlab.gnome.org/World/vocalis
+- Translations are inherited from upstream: https://wiki.gnome.org/TranslationProject
+- Matrix (upstream): [#sound-recorder:gnome.org](https://matrix.to/#/#sound-recorder:gnome.org)
+
+For this fork, report issues in your own tracker.
+
+### License
+
+GPL-3.0-or-later. Derived from the original Vocalis; see [`COPYING`](COPYING) and
+[`AUTHORS`](AUTHORS).

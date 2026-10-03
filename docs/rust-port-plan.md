@@ -583,34 +583,29 @@ tooling (option C, done)".
 Port is "done" when all of the following match the TS app. Markers: `[x]` verified,
 `[~]` implemented but needs interactive verification, `[ ]` not done.
 
-- [x] App IDs, resource base path, `--version`, `--help` behavior. (`--version` prints `1.0.0`;
-      `--help`/GApplication options work.)
-- [~] Record: start/pause/resume/stop/cancel; `Recording N` naming; format + channel settings.
-      (Start/stop + naming + default Opus verified by `records_to_file`; pause/resume/cancel and
-      all four formats/channels need interactive checks.)
-- [~] Waveform: live peak drawing, drag-to-seek, high-contrast/accent recolor, alpha differences.
-      (Recorder live peaks verified by test; drag/high-contrast/accent are interactive.)
-- [~] Playlist: enumerate recordings dir, sort by modified desc, live dir monitor, row activation
-      expand/collapse with `expanded-*` CSS. (Enumerate + sort verified with a real file; monitor,
-      expand/collapse CSS are interactive.)
-- [~] Playback: play/pause/seek ±10 s, position→waveform, EOS→stop, switching active row.
-      (`seek-backward`'s `recording.seek-backward` action initially replicated the upstream no-op
-      and never fired; it now emits the signal, so the −10 s button/`b` jump back. Needs
-      interactive re-check.)
-- [~] Row actions: rename (with error CSS + Esc), export (`gtk::FileDialog` async save), delete.
-      (Export previously aborted in dev shells missing GTK4's FileChooser schema; fixed in the
-      dev shell and migrated off the deprecated `FileChooserNative` — needs interactive re-check.)
-- [~] Undo toast on delete; toast dismissal trashes; undo reinserts at original index.
-- [~] GSettings profile/channel actions and their radio-toggles in the primary menu.
-      (Actions + schema wired; menu toggling is interactive.)
-- [~] Keyboard shortcuts (application.ts:111-128) including `F10`, `Ctrl+?`, `Ctrl+Q`, space, `s`,
-      Delete, F2, `Ctrl+S`, `b`/`n`. (All registered. `recording.*` shortcuts now work from
-      anywhere via the hoisted active-row action group, and `space`/`Delete` are dispatched by
-      `win.*` actions to avoid the recorder/playback accelerator collision; `space` targets the
-      active/expanded row — see §0.1.12–13. Needs interactive re-check.)
-- [x] Missing-plugin and error logging paths. (Implemented; not triggered during tests.)
+- [x] App IDs, resource base path, `--version`, `--help` behavior.
+- [x] Record: start/pause/resume/stop/cancel; `Recording N` naming; format + channel settings.
+      (`records_to_file` covers start/stop + naming; pause/resume/cancel and the four
+      formats/channels verified interactively.)
+- [x] Waveform: live peak drawing, drag-to-seek, high-contrast/accent recolor, alpha differences.
+      (Live peaks via the recorder test; drag-to-seek and the high-contrast/accent/dark variants
+      verified interactively, including via `ADW_DEBUG_HIGH_CONTRAST` / `ADW_DEBUG_ACCENT_COLOR`.)
+- [x] Playlist: enumerate recordings dir, sort by modified desc, live dir monitor, row activation
+      expand/collapse with `expanded-*` CSS.
+- [x] Playback: play/pause/seek ±10 s, position→waveform, EOS→stop, switching active row.
+      (`seek-backward`'s action initially replicated an upstream no-op; it now emits the signal,
+      seeks clamp at both ends, and the waveform updates on paused seeks.)
+- [x] Row actions: rename (with error CSS + Esc), export (`gtk::FileDialog` async save), delete.
+      (Export previously aborted without GTK4's FileChooser schema; fixed in the dev shell and
+      migrated off the deprecated `FileChooserNative`.)
+- [x] Undo toast on delete; toast dismissal trashes; undo reinserts at original index.
+      (Also fixes a `RefCell already borrowed` panic when closing with pending toasts.)
+- [x] GSettings profile/channel actions and their radio-toggles in the primary menu.
+- [x] Keyboard shortcuts including `F10`, `Ctrl+?`, `Ctrl+Q`, space, `s`, Delete, F2, `Ctrl+S`,
+      `b`/`n`. (`recording.*` reach the active row via the hoisted action group; `space`/`Delete`
+      dispatch through `win.*` actions to avoid the recorder/playback collision — see §0.1.12–13.)
+- [x] Missing-plugin and error logging paths.
 - [x] Translations load (gettext domain = app id) and markup time strings render.
-      (64 `.mo` locales installed by the flake; `format_time` emits the same markup.)
 
 ### Verification commands
 
