@@ -36,6 +36,31 @@ packaging are implemented and verified to build/run. M6 is a parity/interactive-
 - Manually verified list enumeration + sorting + row creation + peaks cache generation using a
   real Opus file generated with `gst-launch`.
 
+**Cleanup (done)**
+- Removed the legacy GJS/TypeScript sources and the npm/tsc toolchain
+  (`src/*.ts`, `src/*.in`, `package.json`, `package-lock.json`, `tsconfig.json`,
+  `.eslintrc.js`, `.eslintignore`, `types/`, `gi-types/` submodule) and the obsolete Flatpak
+  manifest + GitLab CI.
+- Help overlay updated for the shortcut changes (`win.play-pause`, `win.delete-recording`;
+  second group renamed to "Playback").
+
+**Hybrid tooling (option C, done)**
+- Kept **Cargo + Nix** as the primary dev/build path (`cargo run`, `nix build`, flake package).
+- Added a **thin Meson layer** solely for i18n, installation, Flatpak and CI, reusing the same
+  Cargo build (`build.rs` still embeds the GResource):
+  - `meson.build`, `meson.options`, `src/meson.build`, `data/meson.build`, `po/meson.build`.
+  - `po/meson.build` uses `i18n.gettext(…, args: ['--keyword=gettextrs::gettext',
+    '--keyword=gettextrs::ngettext:1,2'], preset: 'glib')`; `utils.rs` was refactored so the
+    plural `ngettext` calls are inline and extractable.
+  - Meson passes `VOCALIS_LOCALEDIR` and `VOCALIS_VERSION_SUFFIX` (and `--features development`
+    for the dev profile); `config.rs` now has `version()` and a compile-time `LOCALEDIR` fallback.
+  - Flatpak: `build-aux/app.drey.Vocalis.Devel.json` (`buildsystem: meson`, rust-stable SDK
+    extension, network build for crates).
+  - CI: `.gitlab-ci.yml` + `.gitlab-ci/{check,build,test,utils}.yml`.
+- Verified: `meson setup/compile/install` builds the binary via Cargo, compiles 63 translations,
+  installs schema/desktop/metainfo/icons, and `…-pot` extracts the expected msgids (including the
+  date plurals) that match the preserved `.po` files.
+
 ### 0.1 Deviations from the faithful port (and why)
 
 1. **`Gio.ListStore` is not subclassable in gio-rs.** There is no `gio::subclass::list_store`
@@ -468,11 +493,12 @@ Source: window.ts.
 - `help-overlay.ui` alias at `gtk/help-overlay.ui` enables the built-in
   `win.show-help-overlay` shortcut from `AdwApplicationWindow`.
 
-### 9.2 Build orchestration — Cargo-native (decided)
+### 9.2 Build orchestration — Cargo-native + thin Meson layer
 
-Decision: **Cargo-native.** The goal is a personal fork with a NixOS flake, not upstream submission,
-so the GNOME/Flatpak packaging parity that favored Meson is not worth the tooling cost. Cargo owns
-compilation, tests, and the dev loop; the Nix flake owns installation of data and translations.
+Decision: **Cargo-native** is the primary path (dev loop, Nix flake, packaging). A **thin Meson
+layer** was later added on top (option C) purely for i18n, Flatpak and CI — it drives the same
+Cargo build and `build.rs`-embedded GResource; it does not replace Cargo/Nix. See §0 "Hybrid
+tooling (option C, done)".
 
 - **Build:** `cargo build` / `cargo run` / `cargo test` are the source of truth. `build.rs` (using
   `glib-build-tools`) compiles the data gresource automatically, so `cargo run` is sufficient for
@@ -502,8 +528,9 @@ compilation, tests, and the dev loop; the Nix flake owns installation of data an
 - **Icon theme in dev:** include `adwaita-icon-theme`/`hicolor-icon-theme` in the dev shell so
   GTK's default "Adwaita" theme resolves themed symbolic icons; the package appends their `share`
   dirs to the wrapper's `XDG_DATA_DIRS` in `preFixup`.
-- Optionally add a **thin Meson layer later, only if you decide to upstream**; it is not part of
-  this plan's build path.
+- The **thin Meson layer** is present (option C): `meson.build`, `meson.options`, `src/meson.build`,
+  `data/meson.build`, `po/meson.build` — used for `i18n.gettext`, install, Flatpak and CI while
+  Cargo/Nix remain the day-to-day tooling.
 
 ### 9.3 Profiles and IDs
 
@@ -513,19 +540,15 @@ compilation, tests, and the dev loop; the Nix flake owns installation of data an
   `VOCALIS_VERSION_SUFFIX` (set by the flake/CI, e.g. `git rev-parse --short HEAD`).
 - Icon names and XDG `data`/`cache` dirs use `APP_ID` (application.ts:28-34, 82, 152).
 
-### 9.4 Flatpak / CI
+### 9.4 Flatpak / CI (implemented via the Meson layer)
 
-The existing Flatpak/CI is upstream-oriented and may be dropped for a personal fork. If a Flatpak
-is still wanted:
-
-- Remove node20 + typescript SDK extensions and `append-path` (manifest lines 6-8, 21-23;
-  `.gitlab-ci.yml:17,22`).
-- Switch the module to `buildsystem: simple` and drive `cargo build --release`, or use the
-  `org.freedesktop.Sdk.Extension.rust-stable` SDK extension. Vendor dependencies for reproducible
-  offline builds via `cargo-sources.json` (generated with `flatpak-cargo-generator.py`).
-- Install data/locale/schema as in §9.2 inside the module's `install` commands.
-- Replace the `eslint` CI job (`.gitlab-ci.yml:27-38`) with `cargo fmt --check`, `cargo clippy`,
-  and `cargo test`. If the fork has no CI, this is optional.
+- **Flatpak:** `build-aux/app.drey.Vocalis.Devel.json`, `buildsystem: meson`,
+  `org.freedesktop.Sdk.Extension.rust-stable`, `append-path`, `build-args: --share=network`
+  (Cargo fetches crates at build time, like Fractal). `-Dprofile=development`.
+  For Flathub, crates would need vendoring (`cargo-sources.json`); not done, as this targets
+  GNOME-nightly/development builds.
+- **CI:** `.gitlab-ci.yml` + `.gitlab-ci/{utils,check,build,test}.yml` — `cargo fmt`/`clippy`
+  (gtk4-rs image), `cargo test`, and GNOME `citemplates` Flatpak builds (`x86_64`/`aarch64`).
 
 ### 9.5 Nix flake (NixOS-first)
 

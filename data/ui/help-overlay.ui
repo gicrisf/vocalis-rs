@@ -23,14 +23,14 @@
             </child>
             <child>
               <object class="GtkShortcutsShortcut">
-                <property name="action-name">recorder.pause</property>
+                <property name="action-name">win.play-pause</property>
                 <property name="title" translatable="yes" context="shortcut window">Play / Pause / Resume</property>
               </object>
             </child>
 
              <child>
               <object class="GtkShortcutsShortcut">
-                <property name="action-name">recorder.cancel</property>
+                <property name="action-name">win.delete-recording</property>
                 <property name="title" translatable="yes" context="shortcut window">Delete</property>
               </object>
             </child>
@@ -56,7 +56,7 @@
         </child>
         <child>
           <object class="GtkShortcutsGroup">
-            <property name="title" translatable="yes" context="shortcut window">Recording</property>
+            <property name="title" translatable="yes" context="shortcut window">Playback</property>
              <child>
               <object class="GtkShortcutsShortcut">
                 <property name="action-name">recording.seek-backward</property>

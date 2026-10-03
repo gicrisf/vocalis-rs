@@ -1,0 +1,9 @@
+# Rust tests.
+
+include: '.gitlab-ci/utils.yml'
+
+cargo-test:
+  stage: test
+  extends: .dev_image
+  script:
+    - cargo test

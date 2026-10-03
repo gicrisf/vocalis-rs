@@ -1,68 +1,61 @@
 project(
   'vocalis',
+  'rust',
   version: '1.0.0',
-  license: 'GPL2+',
-  meson_version: '>= 0.63.0',
+  license: 'GPL-3.0-or-later',
+  meson_version: '>= 1.1',
 )
-
-
-if get_option('profile') == 'development'
-  profile = '.Devel'
-  name_suffix = ' (Development)'
-  vcs_tag = run_command('git', 'rev-parse', '--short', 'HEAD', check: true).stdout().strip()
-  if vcs_tag == ''
-    version_suffix = '-devel'
-  else
-    version_suffix = '-@0@'.format (vcs_tag)
-  endif
-else
-  profile = ''
-  name_suffix = ''
-  version_suffix = ''
-endif
-
-application_id = 'app.drey.Vocalis@0@'.format(profile)
-
-gettext_package = application_id
-vocalis_prefix = get_option('prefix')
-vocalis_bindir = vocalis_prefix / get_option('bindir')
-vocalis_libdir = vocalis_prefix / get_option('libdir')
-vocalis_datadir = vocalis_prefix / get_option('datadir')
-vocalis_pkgdatadir = vocalis_datadir / application_id
-
-vocalis_schemadir = vocalis_datadir / 'glib-2.0' / 'schemas'
-
-po_dir = meson.project_source_root() / 'po'
-
-gjs_dep = dependency('gjs-1.0', version: '>= 1.54.0')
-gjs_console = gjs_dep.get_variable(pkgconfig: 'gjs_console')
-
-# Lets check whether the dependencies exist
-dependency('gio-2.0', version: '>= 2.43.4')
-dependency('glib-2.0', version: '>= 2.39.3')
-dependency('gtk4', version: '>= 4.15.2')
-dependency('gstreamer-player-1.0', version: '>= 1.12')
-dependency('libadwaita-1', version: '>= 1.6.alpha')
-dependency('gobject-introspection-1.0', version: '>= 1.31.6')
-dependency('gstreamer-1.0')
-dependency('gstreamer-pbutils-1.0')
-
 
 gnome = import('gnome')
 i18n = import('i18n')
 
-tsc = find_program('tsc', required: true)
+base_id = 'app.drey.Vocalis'
+
+cargo = find_program('cargo', required: true)
+
+prefix = get_option('prefix')
+bindir = prefix / get_option('bindir')
+datadir = prefix / get_option('datadir')
+schemadir = datadir / 'glib-2.0' / 'schemas'
+iconsdir = datadir / 'icons'
+localedir = prefix / get_option('localedir')
+podir = meson.project_source_root() / 'po'
+
+# Profile / application id / cargo target.
+application_id = base_id
+profile = 'default'
+rust_target = 'release'
+cargo_profile_args = ['--release']
+cargo_features_args = []
+version_suffix = ''
+
+if get_option('profile') == 'development'
+  profile = 'development'
+  application_id += '.Devel'
+  rust_target = 'debug'
+  cargo_profile_args = []
+  cargo_features_args = ['--features', 'development']
+  vcs_tag = run_command('git', 'rev-parse', '--short', 'HEAD', check: false).stdout().strip()
+  if vcs_tag == ''
+    vcs_tag = 'devel'
+  endif
+  version_suffix = '-' + vcs_tag
+endif
+
+gettext_package = application_id
+
+cargo_target_dir = meson.project_build_root() / 'cargo-target'
+cargo_home = meson.project_build_root() / 'cargo-home'
+cargo_env = [
+  'CARGO_HOME=' + cargo_home,
+  'CARGO_TARGET_DIR=' + cargo_target_dir,
+  'VOCALIS_LOCALEDIR=' + localedir,
+  'VOCALIS_VERSION_SUFFIX=' + version_suffix,
+]
 
 subdir('data')
-subdir('src')
 subdir('po')
-
-
-install_symlink(
-  meson.project_name(),
-  pointing_to: vocalis_pkgdatadir / application_id,
-  install_dir: vocalis_bindir
-)
+subdir('src')
 
 gnome.post_install(
   glib_compile_schemas: true,

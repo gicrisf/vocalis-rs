@@ -7,9 +7,9 @@ data/ui/help-overlay.ui
 data/ui/recorder.ui
 data/ui/row.ui
 data/ui/window.ui
-src/application.ts
-src/recorder.ts
-src/recorderWidget.ts
-src/row.ts
-src/utils.ts
-src/window.ts
+src/application.rs
+src/recorder.rs
+src/recorder_widget.rs
+src/row.rs
+src/utils.rs
+src/window.rs

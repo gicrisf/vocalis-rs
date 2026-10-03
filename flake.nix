@@ -43,6 +43,8 @@
               rust-analyzer
               clippy
               rustfmt
+              meson
+              ninja
               pkg-config
               gobject-introspection
               libxml2

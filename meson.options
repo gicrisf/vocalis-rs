@@ -5,9 +5,6 @@ option(
                 'default',
                 'development'
         ],
-        value: 'default'
-)
-option(
-        'offline-mirror',
-        type: 'string'
+        value: 'default',
+        description: 'Build profile. "development" uses the .Devel app id.'
 )

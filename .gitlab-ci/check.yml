@@ -1,0 +1,15 @@
+# Lint and format checks.
+
+include: '.gitlab-ci/utils.yml'
+
+cargo-fmt:
+  stage: check
+  extends: .dev_image
+  script:
+    - cargo fmt --check
+
+cargo-clippy:
+  stage: check
+  extends: .dev_image
+  script:
+    - cargo clippy --all-targets -- -D warnings

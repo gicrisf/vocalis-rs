@@ -46,7 +46,7 @@ mod imp {
             options: &glib::VariantDict,
         ) -> std::ops::ControlFlow<glib::ExitCode> {
             if options.contains("version") {
-                println!("{}", config::VERSION);
+                println!("{}", config::version());
                 return std::ops::ControlFlow::Break(glib::ExitCode::SUCCESS);
             }
             std::ops::ControlFlow::Continue(())
@@ -139,7 +139,7 @@ impl Application {
         let about = adw::AboutDialog::builder()
             .application_name(application_name.as_str())
             .application_icon(config::APP_ID)
-            .version(config::VERSION)
+            .version(config::version())
             .license_type(gtk::License::Gpl20)
             .website("https://gitlab.gnome.org/World/vocalis")
             .issue_url("https://gitlab.gnome.org/World/vocalis/-/issues")

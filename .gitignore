@@ -1,12 +1,10 @@
 _build
 /build
+/build-meson
 /target
 /result
 **/*.swp
 **/*.*~
 **/tags.*
-.flatpak
-node_modules/
 .vscode/
-.fenv/
-.flatpak-builder/
+po/*.pot

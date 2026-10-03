@@ -1,39 +1,21 @@
-include:
-  - project: "gnome/citemplates"
-    file: "flatpak/flatpak_ci_initiative.yml"
+stages:
+  - check
+  - build
+  - test
 
 variables:
-    GIT_SUBMODULE_STRATEGY: recursive
-    GIT_SUBMODULE_DEPTH: 1
-    MANIFEST_PATH: "app.drey.Vocalis.Devel.json"
-    BUNDLE: "vocalis-dev.flatpak"
-    FLATPAK_MODULE: "vocalis"
-    RUNTIME_REPO: "https://nightly.gnome.org/gnome-nightly.flatpakrepo"
-    APP_ID: "app.drey.Vocalis.Devel"
+  # Name of this project's module in the Flatpak manifest.
+  FLATPAK_MODULE: "vocalis"
+  # Path to the Flatpak manifest.
+  MANIFEST_PATH: "build-aux/app.drey.Vocalis.Devel.json"
+  # Flatpak application ID (development profile).
+  APP_ID: "app.drey.Vocalis.Devel"
 
-flatpak:
-  extends: '.flatpak@x86_64'
-  before_script:
-    - flatpak --user install -y org.freedesktop.Sdk.Extension.node20//24.08beta org.freedesktop.Sdk.Extension.typescript//24.08beta
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH
 
-flatpak-aarch64:
-  extends: '.flatpak@aarch64'
-  before_script:
-    - flatpak --user install -y org.freedesktop.Sdk.Extension.node20//24.08beta org.freedesktop.Sdk.Extension.typescript//24.08beta
-
-nightly:
-  extends: ".publish_nightly"
-
-eslint:
-  image: quay.io/fedora/fedora:latest
-
-  variables:
-    LINT_LOG: "eslint-report.txt"
-  script:
-    - sudo dnf install -y npm
-    - npm install
-    - npx eslint -o $LINT_LOG --no-color src || { cat $LINT_LOG; false; }
-  artifacts:
-    paths:
-      - ${LINT_LOG}
-    when: on_failure
+include:
+  - local: .gitlab-ci/check.yml
+  - local: .gitlab-ci/build.yml
+  - local: .gitlab-ci/test.yml
