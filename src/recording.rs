@@ -374,7 +374,10 @@ impl Recording {
         glib::MainContext::default().spawn_local(async move {
             let (future, _progress) =
                 file.copy_future(&dest, gio::FileCopyFlags::NONE, glib::Priority::DEFAULT);
-            let _ = future.await;
+            match future.await {
+                Ok(()) => println!("Exporting file: done"),
+                Err(err) => eprintln!("Failed to export file: {err}"),
+            }
         });
     }
 

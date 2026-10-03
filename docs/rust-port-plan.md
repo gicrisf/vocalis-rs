@@ -1,6 +1,6 @@
 # Vocalis → Rust (gtk4-rs) Port Plan
 
-Status: planning
+Status: M0–M5 complete; M6 parity/interactive review remaining
 App: Vocalis (`app.drey.Vocalis`), a GNOME sound recorder (formerly gnome-sound-recorder)
 Current implementation: GJS + TypeScript, ~1,795 non-comment LOC across 11 modules (2,256 total),
 plus 658 lines of reusable `.ui` templates.
@@ -8,6 +8,69 @@ plus 658 lines of reusable `.ui` templates.
 This document is the authoritative plan for a **faithful 1:1 port to Rust using `gtk4-rs` /
 `libadwaita-rs`**, keeping the GObject subclass architecture. A separate appendix records the
 **lean port** options so we can improve incrementally in later phases.
+
+---
+
+## 0. Implementation status
+
+**Phases:** M0 scaffolding, M1 recorder core, M2 library, M3 rows/playback, M4 window/undo, and M5
+packaging are implemented and verified to build/run. M6 is a parity/interactive-review pass.
+
+**Rust modules now present** (`src/`):
+
+| Rust | Replaces | Phase |
+|---|---|---|
+| `main.rs`, `config.rs`, `application.rs`, `window.rs` | `main.ts`, `application.ts`, `window.ts` | M0/M4 |
+| `recorder.rs`, `waveform.rs`, `recorder_widget.rs` | `recorder.ts`, `waveform.ts`, `recorderWidget.ts` | M1 |
+| `recording.rs`, `recording_list.rs`, `row.rs`, `recording_list_widget.rs` | `recording.ts`, `recordingList.ts`, `row.ts`, `recordingListWidget.ts` | M2/M3 |
+| `utils.rs` | `utils.ts` | M1 |
+
+**Build/verify state**
+- `cargo build`, `cargo fmt --check`, `cargo clippy --all-targets` (0 warnings), and
+  `cargo test` are clean.
+- `recorder::tests::records_to_file` (`#[ignore]`, needs a capture device) records 1.5 s via the
+  real pipeline and asserts a non-empty Opus file; passes under PipeWire.
+- `nix build .#` produces a fully installed, `wrapGAppsHook4`-wrapped app (schema, `.desktop`,
+  metainfo, icons, 64 locales). `result/bin/vocalis --version` → `1.0.0`; GUI launches.
+- Confirmed libadwaita auto-loads `style.css` from the resource base path.
+- Manually verified list enumeration + sorting + row creation + peaks cache generation using a
+  real Opus file generated with `gst-launch`.
+
+### 0.1 Deviations from the faithful port (and why)
+
+1. **`Gio.ListStore` is not subclassable in gio-rs.** There is no `gio::subclass::list_store`
+   (only `list_model`). `RecordingList` is therefore a plain Rust struct owning a
+   `gio::ListStore`, a `FileMonitor`, and a `Cancellable` (the store is passed to
+   `ListBox::bind_model`). This moved the appendix item §14.2 into the base port.
+2. **Player signal `Send` bounds.** `Player::connect_state_changed` /
+   `connect_position_updated` require `Fn + Send`. Widgets are not `Send`, so signals are
+   marshalled through `glib::SendWeakRef` (created on the main thread, upgraded from the
+   `PlayerGMainContextSignalDispatcher` callback).
+3. **Discoverer `Send + Sync` bound.** `Discoverer::connect_discovered` requires `Send + Sync`;
+   the discovered duration is forwarded via `std::sync::mpsc` and applied on the main thread with
+   a `glib::timeout_add_local` poll.
+4. **Async file I/O** uses the gio `*_future` APIs driven by `glib::MainContext::spawn_local`
+   instead of `Gio._promisify` + `await`.
+5. **Stricter `gst-rs` APIs:** `Pipeline::set_state` returns `Result` not a state enum;
+   `Caps::set_value` needs `Caps::make_mut`; `EncodingAudioProfile`/`EncodingContainerProfile`
+   are built via their builders (`EncodingProfileBuilder` trait, imported from `gst_pbutils::prelude`);
+   `parse_launch` is `gst::parse::launch_full`; missing-plugin helpers are
+   `MissingPluginMessage::{is,parse}`.
+6. **glib-rs 0.22 specifics:** `bind_property` is a builder
+   (`.flags(..).build()`); `connect_local` returns `SignalHandlerId` directly (no `unwrap`);
+   template children use explicit `#[template_child(id = "...")]` because UI ids are camelCase.
+7. **Template class names** updated from `Gjs_*` to `Vocalis*` (`VocalisWindow`,
+   `VocalisRecorderWidget`, `VocalisRow`) to match the Rust GType names.
+8. **`gettextrs::setlocale` is `unsafe`** in 0.8 and is wrapped in `unsafe { .. }`.
+9. **Property types:** `duration` is `i64` (not the TS `MAXINT16`-bounded int). `Recorder::stop()`
+   now returns `Option<Recording>` and the recorder widget's `stopped` signal carries it.
+10. **Bug-for-bug choices:** kept `seek-backward` as a no-op and the `current_peak` `>0 → 0`
+    clamp; fixed `format_time` to integer arithmetic (avoids the JS 24h wrap) and store waveform
+    peaks as `f64` (not the TS `toFixed(2)` strings).
+11. **Export uses `gtk::FileDialog`** (GTK 4.10+ async `save_future`) instead of the deprecated
+    `Gtk.FileChooserNative`. It needs the same `org.gtk.gtk4.Settings.FileChooser` schema, which
+    is why the dev shell must expose GTK4's GSettings schemas (see §9.5). `Recording::save` now
+    logs copy success/failure instead of swallowing errors.
 
 ---
 
@@ -447,8 +510,12 @@ is still wanted:
   - build-time: `gobject-introspection` (typelibs for the `-sys` crates)
   - tooling: `gettext`, `desktop-file-utils`, `appstream`, `glib` (`glib-compile-schemas`),
     `gtk4` (`gtk4-update-icon-cache`)
-  - `shellHook`: compile `data/*.gschema.xml` to a local dir and export `GSETTINGS_SCHEMA_DIR`,
-    so `cargo run` works uninstalled.
+  - `shellHook`: compile `data/*.gschema.xml` to a local dir and export `GSETTINGS_SCHEMA_DIR`
+    including the app schema **plus** GTK4's own schemas
+    (`<gtk4>/share/gsettings-schemas/<gtk4.name>/glib-2.0/schemas`) and
+    `gsettings-desktop-schemas`' compiled dir. Without the GTK4 entry, opening the export
+    `FileDialog` aborts with `Settings schema 'org.gtk.gtk4.Settings.FileChooser' is not
+    installed`. The packaged app gets these via `wrapGAppsHook4` (`XDG_DATA_DIRS`).
 - **`packages.default`:** `rustPlatform.buildRustPackage` with `cargoLock.lockFile = ./Cargo.lock`;
   `nativeBuildInputs = [ pkg-config wrapGAppsHook4 gobject-introspection ]`;
   `buildInputs = [ gtk4 libadwaita gst_all_1.gstreamer ... ]`. Override `installPhase` (or add
@@ -462,21 +529,31 @@ is still wanted:
 
 ## 10. Behavior-parity checklist
 
-Port is "done" when all of the following match the TS app:
+Port is "done" when all of the following match the TS app. Markers: `[x]` verified,
+`[~]` implemented but needs interactive verification, `[ ]` not done.
 
-- [ ] App IDs, resource base path, `--version`, `--help` behavior.
-- [ ] Record: start/pause/resume/stop/cancel; `Recording N` naming; format + channel settings.
-- [ ] Waveform: live peak drawing, drag-to-seek, high-contrast/accent recolor, alpha differences.
-- [ ] Playlist: enumerate recordings dir, sort by modified desc, live dir monitor, row activation
-      expand/collapse with `expanded-*` CSS.
-- [ ] Playback: play/pause/seek ±10 s, position→waveform, EOS→stop, switching active row.
-- [ ] Row actions: rename (with error CSS + Esc), export (FileChooserNative), delete.
-- [ ] Undo toast on delete; toast dismissal trashes; undo reinserts at original index.
-- [ ] GSettings profile/channel actions and their radio-toggles in the primary menu.
-- [ ] Keyboard shortcuts (application.ts:111-128) including `F10`, `Ctrl+?`, `Ctrl+Q`, space, `s`,
-      Delete, F2, `Ctrl+S`, `b`/`n`.
-- [ ] Missing-plugin and error logging paths.
-- [ ] Translations load (gettext domain = app id) and markup time strings render.
+- [x] App IDs, resource base path, `--version`, `--help` behavior. (`--version` prints `1.0.0`;
+      `--help`/GApplication options work.)
+- [~] Record: start/pause/resume/stop/cancel; `Recording N` naming; format + channel settings.
+      (Start/stop + naming + default Opus verified by `records_to_file`; pause/resume/cancel and
+      all four formats/channels need interactive checks.)
+- [~] Waveform: live peak drawing, drag-to-seek, high-contrast/accent recolor, alpha differences.
+      (Recorder live peaks verified by test; drag/high-contrast/accent are interactive.)
+- [~] Playlist: enumerate recordings dir, sort by modified desc, live dir monitor, row activation
+      expand/collapse with `expanded-*` CSS. (Enumerate + sort verified with a real file; monitor,
+      expand/collapse CSS are interactive.)
+- [~] Playback: play/pause/seek ±10 s, position→waveform, EOS→stop, switching active row.
+- [~] Row actions: rename (with error CSS + Esc), export (`gtk::FileDialog` async save), delete.
+      (Export previously aborted in dev shells missing GTK4's FileChooser schema; fixed in the
+      dev shell and migrated off the deprecated `FileChooserNative` — needs interactive re-check.)
+- [~] Undo toast on delete; toast dismissal trashes; undo reinserts at original index.
+- [~] GSettings profile/channel actions and their radio-toggles in the primary menu.
+      (Actions + schema wired; menu toggling is interactive.)
+- [~] Keyboard shortcuts (application.ts:111-128) including `F10`, `Ctrl+?`, `Ctrl+Q`, space, `s`,
+      Delete, F2, `Ctrl+S`, `b`/`n`. (All registered; behavior is interactive.)
+- [x] Missing-plugin and error logging paths. (Implemented; not triggered during tests.)
+- [x] Translations load (gettext domain = app id) and markup time strings render.
+      (64 `.mo` locales installed by the flake; `format_time` emits the same markup.)
 
 ### Verification commands
 
@@ -513,26 +590,34 @@ M2/M3 build the model/view stack on a working engine.
 
 ## 12. Risks and known gotchas
 
-1. **`Gio.ListStore` subclassing** (`recording_list.rs`) is niche and verbose; budget extra time.
-2. **GObject int property ranges:** current `duration` uses max `MAXINT16` for ns values
-   (recorder.ts:106, recording.ts:41). Use `i64`/`u64` in Rust; do not replicate.
-3. **`ValueArray` peak extraction:** API differs from GJS; verify with real `level` messages.
-4. **Discoverer lifetime:** must outlive the async discovery; store it in the `Recording` imp.
-5. **GStreamer bus watch on the right context:** use `add_watch_local` to avoid cross-thread
-   issues; matches the GJS signal-watch behavior.
-6. **Adw API baseline:** accent-color/high-contrast need libadwaita ≥ 1.6; ensure the pinned
-   crate/toolkit versions expose them.
-7. **`style.css` auto-load:** relies on Adw behavior; verify and fall back to a `CssProvider`.
-8. **Bug-for-bug fidelity decisions** to make explicitly: `seek-backward` empty handler
-   (row.ts:213-217), `current_peak` clamp oddity (recorder.ts:322), `formatTime` 24h wrap
-   (utils.ts:25), waveform string-peaks (waveform.ts:206). Document each choice in the commit.
-9. **Action groups and accelerators:** `recording.*` groups are per-row widgets; `app.*` accels
-   resolve via focus. Reproduce insertion points exactly.
-10. **i18n init:** GJS's `pkg.initGettext()`/`initFormat()` must be replaced with explicit
-    `gettextrs::setlocale`/`textdomain`/`bindtextdomain(LOCALEDIR, APP_ID)` in `main`.
-11. **Profile suffix in resources:** JS resource path used `@profile@`, but data resources and
-    templates do **not**; ensure `RESOURCE_BASE_PATH` stays constant across profiles.
-12. **Flatpak Rust vendoring** is the main packaging risk; decide network vs vendored early in M5.
+Each item carries its resolution status from the implementation.
+
+1. **`Gio.ListStore` subclassing** — **resolved by deviation.** gio-rs exposes no `ListStore`
+   subclass; `RecordingList` is a plain struct owning a `gio::ListStore` (see §0.1.1).
+2. **GObject int property ranges** — **resolved.** `duration` is `i64`; no `MAXINT16` clamp.
+3. **`ValueArray` peak extraction** — **resolved.** `Structure::get::<glib::ValueArray>("peak")` +
+   `as_slice()[0].get::<f64>()`; verified by the recording test and the peaks cache.
+4. **Discoverer lifetime** — **resolved.** Stored in the `Recording` imp; duration delivered over
+   an `mpsc` channel (see §0.1.3).
+5. **GStreamer bus watch context** — **resolved.** `add_watch_local` used for both the recorder and
+   the peaks pipeline.
+6. **Adw API baseline** — **resolved.** Pinned libadwaita 1.9; `v1_6` feature enabled for
+   `accent_color`/`is_high_contrast`.
+7. **`style.css` auto-load** — **resolved.** Confirmed libadwaita loads the app `style.css`; no
+   manual `CssProvider` needed.
+8. **Bug-for-bug fidelity decisions** — **done.** `seek-backward` no-op and `current_peak` clamp
+   kept; `format_time` fixed to integer arithmetic; peaks stored as `f64` (see §0.1.10).
+9. **Action groups and accelerators** — **resolved.** Per-row `recording.*` groups and app-level
+   accelerators reproduced.
+10. **i18n init** — **resolved.** `unsafe setlocale` + `bindtextdomain`/`textdomain` in `main.rs`.
+11. **Profile suffix in resources** — **resolved.** `RESOURCE_BASE_PATH` is constant; only `APP_ID`
+    differs by the `development` Cargo feature.
+12. **Flatpak Rust vendoring** — **deferred/optional.** The Nix flake package is the supported
+    packaging path; Flatpak would use `buildsystem: simple` + `cargo-sources.json` if needed.
+13. **GTK4 GSettings schemas in the dev shell** — **resolved.** The dev shell's
+    `GSETTINGS_SCHEMA_DIR` must include `<gtk4>/…/glib-2.0/schemas` and the desktop-schemas dir;
+    otherwise file dialogs abort (`org.gtk.gtk4.Settings.FileChooser` not installed). Re-enter
+    `nix develop` after editing the shellHook for it to take effect.
 
 ---
 
@@ -552,18 +637,24 @@ These are **not** part of the faithful port. Apply opportunistically after parit
 verifying behavior each step. They reduce LOC and boilerplate by avoiding GObject modeling where
 it isn't required. Estimated savings are relative to the faithful port.
 
+> Note: the base port already adopts **14.1** (`serde`/`serde_json`) and the `ListStore` half of
+> **14.2** (a plain `gio::ListStore`, since gio-rs cannot subclass `ListStore`). Do **not** apply
+> **14.6** (`tokio`) or **14.7** (replace GStreamer).
+
 ### 14.1 Use `serde`/`serde_json` everywhere
 - **Target:** peaks cache in `recording.rs`; future trim metadata.
 - **Change:** define `#[derive(Serialize, Deserialize)] struct Peaks(Vec<f32>)`; replace
   hand-rolled JSON. The faithful port already uses `serde_json`, so this is mostly tightening types.
 - **Saving:** ~30–80 lines. **Risk:** low.
 
-### 14.2 Replace `Gio.ListStore` subclass with `BoxedAnyObject`
-- **Target:** `recording_list.rs`, `recording_list_widget.rs`.
-- **Change:** store `glib::BoxedAnyObject::new(RecordingData)` (a plain struct) in a plain
-  `gio::ListStore::new::<glib::BoxedAnyObject>()`; keep `bind_model`.
-- **Saving:** ~150–250 lines and removes the hardest subclass. **Risk:** medium — model item type
-  changes; monitor/sort logic stays.
+### 14.2 Replace the GObject `Recording` model with `BoxedAnyObject`
+- **Target:** `recording_list.rs`, `recording_list_widget.rs`, `recording.rs`.
+- **Status:** the base port already avoids a `ListStore` subclass (it owns a `gio::ListStore`), so
+  the `ListStore` half of this item is done. Remaining: store
+  `glib::BoxedAnyObject::new(RecordingData)` (a plain struct) instead of a `Recording` GObject.
+- **Change:** swap the model item type; keep `bind_model`.
+- **Saving:** ~150–250 lines by dropping the `Recording` GObject subclass. **Risk:** medium — model
+  item type changes; monitor/sort logic stays.
 
 ### 14.3 Drop GObject subclassing for non-widget models
 - **Target:** `recorder.rs` (`Recorder`), `recording.rs` (`Recording`).
@@ -580,8 +671,10 @@ it isn't required. Estimated savings are relative to the faithful port.
 
 ### 14.5 Use modern `glib::clone!` `#[weak]`/`#[strong]` closure attributes
 - **Target:** all widget files.
+- **Status:** not yet applied. The base port uses explicit `downgrade()`/`upgrade()` (and
+  `glib::SendWeakRef` where player signals require `Send`).
 - **Change:** replace manual weak-ref plumbing with `#[weak]`/`#[upgrade_or_default]` closure
-  setup.
+  setup where it does not conflict with the `Send` bounds.
 - **Saving:** 50–150 lines across the codebase. **Risk:** low.
 
 ### 14.6 Do **not** introduce `tokio`

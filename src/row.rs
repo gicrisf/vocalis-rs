@@ -57,8 +57,6 @@ mod imp {
         pub edit_mode: Cell<bool>,
         pub state: Cell<RowState>,
         pub action_group: RefCell<Option<gio::SimpleActionGroup>>,
-        #[allow(deprecated)]
-        pub export_dialog: RefCell<Option<gtk::FileChooserNative>>,
         pub save_rename_action: RefCell<Option<gio::SimpleAction>>,
         pub rename_action: RefCell<Option<gio::SimpleAction>>,
         pub pause_action: RefCell<Option<gio::SimpleAction>>,
@@ -294,7 +292,6 @@ mod imp {
             *self.action_group.borrow_mut() = Some(group);
         }
 
-        #[allow(deprecated)]
         fn on_export(&self) {
             let recording = self.recording.borrow().clone().unwrap();
             let parent = self
@@ -302,38 +299,24 @@ mod imp {
                 .root()
                 .and_then(|root| root.downcast::<gtk::Window>().ok());
 
-            let dialog = gtk::FileChooserNative::new(
-                Some(&gettextrs::gettext("Export Recording")),
-                parent.as_ref(),
-                gtk::FileChooserAction::Save,
-                Some(&gettextrs::gettext("_Export")),
-                Some(&gettextrs::gettext("_Cancel")),
-            );
-            dialog.set_current_name(&format!(
+            let dialog = gtk::FileDialog::new();
+            dialog.set_title(&gettextrs::gettext("Export Recording"));
+            dialog.set_accept_label(Some(&gettextrs::gettext("_Export")));
+            dialog.set_initial_name(Some(&format!(
                 "{}.{}",
                 recording.name(),
                 recording.extension().unwrap_or_default()
-            ));
+            )));
 
-            let row = self.obj().downgrade();
-            dialog.connect_response(move |dialog, response| {
-                if response == gtk::ResponseType::Accept {
-                    if let Some(dest) = dialog.file() {
-                        if let Some(row) = row.upgrade() {
-                            if let Some(recording) = row.imp().recording.borrow().as_ref() {
-                                recording.save(&dest);
-                            }
-                        }
-                    }
-                }
-                dialog.destroy();
-                if let Some(row) = row.upgrade() {
-                    *row.imp().export_dialog.borrow_mut() = None;
+            glib::MainContext::default().spawn_local(async move {
+                match dialog.save_future(parent.as_ref()).await {
+                    Ok(dest) => recording.save(&dest),
+                    Err(err)
+                        if err.matches(gtk::DialogError::Dismissed)
+                            || err.matches(gtk::DialogError::Cancelled) => {}
+                    Err(err) => eprintln!("Export failed: {err}"),
                 }
             });
-
-            dialog.show();
-            *self.export_dialog.borrow_mut() = Some(dialog);
         }
 
         fn on_rename(&self) {

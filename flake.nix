@@ -50,7 +50,7 @@
             ] ++ mkRuntimeDeps pkgs;
 
             shellHook = ''
-              export GSETTINGS_SCHEMA_DIR="$PWD/build/schemas:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}$GSETTINGS_SCHEMA_DIR"
+              export GSETTINGS_SCHEMA_DIR="$PWD/build/schemas:${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}/glib-2.0/schemas:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}/glib-2.0/schemas''${GSETTINGS_SCHEMA_DIR:+:$GSETTINGS_SCHEMA_DIR}"
               mkdir -p build/schemas
               sed \
                 -e 's/@app-id@/${appId}/g' \
@@ -139,6 +139,9 @@
             '';
 
             preFixup = ''
+              # Point gettext at the packaged .mo files (read by main.rs).
+              gappsWrapperArgs+=(--set VOCALIS_LOCALEDIR "$out/share/locale")
+
               gtk4-update-icon-cache -q -t -f $out/share/icons/hicolor || true
               update-desktop-database -q $out/share/applications || true
             '';
