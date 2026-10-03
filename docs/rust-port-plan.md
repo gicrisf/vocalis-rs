@@ -64,9 +64,11 @@ packaging are implemented and verified to build/run. M6 is a parity/interactive-
 8. **`gettextrs::setlocale` is `unsafe`** in 0.8 and is wrapped in `unsafe { .. }`.
 9. **Property types:** `duration` is `i64` (not the TS `MAXINT16`-bounded int). `Recorder::stop()`
    now returns `Option<Recording>` and the recorder widget's `stopped` signal carries it.
-10. **Bug-for-bug choices:** kept `seek-backward` as a no-op and the `current_peak` `>0 → 0`
-    clamp; fixed `format_time` to integer arithmetic (avoids the JS 24h wrap) and store waveform
-    peaks as `f64` (not the TS `toFixed(2)` strings).
+10. **Bug-for-bug choices:** kept the `current_peak` `>0 → 0` clamp; fixed `format_time` to integer
+    arithmetic (avoids the JS 24h wrap) and store waveform peaks as `f64` (not the TS
+    `toFixed(2)` strings). `seek-backward` was **fixed** rather than replicated: in the TS original
+    (and the initial port) its `recording.seek-backward` action had no activate handler, so it
+    never emitted the signal; it now emits `seek-backward`, so the −10 s button and `b` work.
 11. **Export uses `gtk::FileDialog`** (GTK 4.10+ async `save_future`) instead of the deprecated
     `Gtk.FileChooserNative`. It needs the same `org.gtk.gtk4.Settings.FileChooser` schema, which
     is why the dev shell must expose GTK4's GSettings schemas (see §9.5). `Recording::save` now
@@ -543,6 +545,9 @@ Port is "done" when all of the following match the TS app. Markers: `[x]` verifi
       expand/collapse with `expanded-*` CSS. (Enumerate + sort verified with a real file; monitor,
       expand/collapse CSS are interactive.)
 - [~] Playback: play/pause/seek ±10 s, position→waveform, EOS→stop, switching active row.
+      (`seek-backward`'s `recording.seek-backward` action initially replicated the upstream no-op
+      and never fired; it now emits the signal, so the −10 s button/`b` jump back. Needs
+      interactive re-check.)
 - [~] Row actions: rename (with error CSS + Esc), export (`gtk::FileDialog` async save), delete.
       (Export previously aborted in dev shells missing GTK4's FileChooser schema; fixed in the
       dev shell and migrated off the deprecated `FileChooserNative` — needs interactive re-check.)
@@ -605,8 +610,9 @@ Each item carries its resolution status from the implementation.
    `accent_color`/`is_high_contrast`.
 7. **`style.css` auto-load** — **resolved.** Confirmed libadwaita loads the app `style.css`; no
    manual `CssProvider` needed.
-8. **Bug-for-bug fidelity decisions** — **done.** `seek-backward` no-op and `current_peak` clamp
-   kept; `format_time` fixed to integer arithmetic; peaks stored as `f64` (see §0.1.10).
+8. **Bug-for-bug fidelity decisions** — **done.** `current_peak` clamp kept; `seek-backward`
+   no-op was fixed instead of replicated; `format_time` fixed to integer arithmetic; peaks stored
+   as `f64` (see §0.1.10).
 9. **Action groups and accelerators** — **resolved.** Per-row `recording.*` groups and app-level
    accelerators reproduced.
 10. **i18n init** — **resolved.** `unsafe setlocale` + `bindtextdomain`/`textdomain` in `main.rs`.

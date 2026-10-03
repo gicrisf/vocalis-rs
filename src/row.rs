@@ -272,6 +272,12 @@ mod imp {
             group.add_action(&delete_action);
 
             let seek_back_action = gio::SimpleAction::new("seek-backward", None);
+            let row = self.obj().downgrade();
+            seek_back_action.connect_activate(move |_, _| {
+                if let Some(row) = row.upgrade() {
+                    row.emit_by_name::<()>("seek-backward", &[]);
+                }
+            });
             group.add_action(&seek_back_action);
 
             let seek_forward_action = gio::SimpleAction::new("seek-forward", None);
