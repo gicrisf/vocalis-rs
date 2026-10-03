@@ -1,0 +1,352 @@
+use std::cell::RefCell;
+use std::sync::OnceLock;
+
+use adw::prelude::*;
+use adw::subclass::prelude::*;
+use gtk::{gio, glib};
+
+use crate::recording::Recording;
+use crate::row::{Row, RowState};
+
+mod imp {
+    use super::*;
+
+    #[derive(Default)]
+    pub struct RecordingsListWidget {
+        player: RefCell<Option<gst_player::Player>>,
+        pub list: RefCell<Option<gtk::ListBox>>,
+        pub active_row: RefCell<Option<Row>>,
+        active_playing_row: RefCell<Option<Row>>,
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for RecordingsListWidget {
+        const NAME: &'static str = "VocalisRecordingsListWidget";
+        type Type = super::RecordingsListWidget;
+        type ParentType = adw::Bin;
+    }
+
+    impl ObjectImpl for RecordingsListWidget {
+        fn signals() -> &'static [glib::subclass::Signal] {
+            static SIGNALS: OnceLock<Vec<glib::subclass::Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![glib::subclass::Signal::builder("row-deleted")
+                    .param_types([Recording::static_type(), glib::Type::U32])
+                    .build()]
+            })
+        }
+    }
+
+    impl WidgetImpl for RecordingsListWidget {}
+    impl BinImpl for RecordingsListWidget {}
+
+    impl RecordingsListWidget {
+        pub fn setup(&self, model: &gio::ListStore, player: &gst_player::Player) {
+            let list = gtk::ListBox::new();
+            list.set_valign(gtk::Align::Start);
+            list.set_margin_start(8);
+            list.set_margin_end(8);
+            list.set_margin_top(12);
+            list.set_margin_bottom(12);
+            list.set_activate_on_single_click(true);
+            list.add_css_class("boxed-list");
+            self.obj().set_child(Some(&list));
+
+            *self.player.borrow_mut() = Some(player.clone());
+            *self.list.borrow_mut() = Some(list.clone());
+
+            let widget = glib::SendWeakRef::from(self.obj().downgrade());
+            player.connect_state_changed(move |_player, state| {
+                if let Some(widget) = widget.upgrade() {
+                    widget.imp().on_state_changed(state);
+                }
+            });
+
+            let widget = glib::SendWeakRef::from(self.obj().downgrade());
+            player.connect_position_updated(move |_player, position| {
+                if let Some(widget) = widget.upgrade() {
+                    widget.imp().on_position_updated(position);
+                }
+            });
+
+            let widget = self.obj().downgrade();
+            list.bind_model(Some(model), move |item| {
+                let recording = item
+                    .clone()
+                    .downcast::<Recording>()
+                    .expect("model item is not a Recording");
+                let row = Row::new(&recording);
+
+                let Some(widget) = widget.upgrade() else {
+                    return row.upcast();
+                };
+
+                widget.imp().wire_row(&row, &recording);
+
+                row.upcast()
+            });
+
+            let widget = self.obj().downgrade();
+            list.connect_row_activated(move |_list, row| {
+                if let (Some(widget), Ok(row)) = (widget.upgrade(), row.clone().downcast::<Row>()) {
+                    widget.imp().on_row_activated(&row);
+                }
+            });
+        }
+
+        fn wire_row(&self, row: &Row, recording: &Recording) {
+            let widget = self.obj().downgrade();
+
+            let row_weak = row.downgrade();
+            let uri = recording.uri();
+            row.waveform()
+                .connect_local("gesture-pressed", false, move |_| {
+                    if let (Some(widget), Some(row)) = (widget.upgrade(), row_weak.upgrade()) {
+                        let imp = widget.imp();
+                        let is_same = imp
+                            .active_playing_row
+                            .borrow()
+                            .as_ref()
+                            .is_some_and(|active| active.as_ptr() == row.as_ptr());
+                        if !is_same {
+                            if let Some(active) = imp.active_playing_row.borrow().as_ref() {
+                                active.waveform().set_position_value(0.0);
+                            }
+                            *imp.active_playing_row.borrow_mut() = Some(row.clone());
+                            if let Some(player) = imp.player.borrow().as_ref() {
+                                player.set_uri(Some(&uri));
+                            }
+                        }
+                    }
+                    None
+                });
+
+            let widget = self.obj().downgrade();
+            let row_weak = row.downgrade();
+            row.waveform()
+                .connect_local("position-changed", false, move |values| {
+                    if let (Some(widget), Some(row)) = (widget.upgrade(), row_weak.upgrade()) {
+                        let position = values[1].get::<f64>().unwrap_or(0.0);
+                        let duration = row.recording().duration();
+                        if let Some(player) = widget.imp().player.borrow().as_ref() {
+                            player.seek(gst::ClockTime::from_nseconds(
+                                (position * duration as f64) as u64,
+                            ));
+                        }
+                    }
+                    None
+                });
+
+            let widget = self.obj().downgrade();
+            let uri = recording.uri();
+            row.connect_play(move |row, _uri| {
+                if let Some(widget) = widget.upgrade() {
+                    let imp = widget.imp();
+                    let player = imp.player.borrow().clone();
+                    if let Some(player) = player {
+                        let active = imp.active_playing_row.borrow().clone();
+                        match active {
+                            Some(active) if active.as_ptr() != row.as_ptr() => {
+                                active.set_state(RowState::Paused);
+                                active.waveform().set_position_value(0.0);
+                                player.set_uri(Some(&uri));
+                            }
+                            None => player.set_uri(Some(&uri)),
+                            _ => {}
+                        }
+                        *imp.active_playing_row.borrow_mut() = Some(row.clone());
+                        player.play();
+                    }
+                }
+            });
+
+            let widget = self.obj().downgrade();
+            row.connect_pause(move |_row| {
+                if let Some(widget) = widget.upgrade() {
+                    if let Some(player) = widget.imp().player.borrow().as_ref() {
+                        player.pause();
+                    }
+                }
+            });
+
+            let widget = self.obj().downgrade();
+            row.connect_seek_backward(move |row| {
+                if let Some(widget) = widget.upgrade() {
+                    if let Some(player) = widget.imp().player.borrow().as_ref() {
+                        seek_by(player, row, -10);
+                    }
+                }
+            });
+
+            let widget = self.obj().downgrade();
+            row.connect_seek_forward(move |row| {
+                if let Some(widget) = widget.upgrade() {
+                    if let Some(player) = widget.imp().player.borrow().as_ref() {
+                        seek_by(player, row, 10);
+                    }
+                }
+            });
+
+            let widget = self.obj().downgrade();
+            row.connect_deleted(move |row| {
+                if let Some(widget) = widget.upgrade() {
+                    let imp = widget.imp();
+
+                    let is_active = imp
+                        .active_row
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|active| active.as_ptr() == row.as_ptr());
+                    if is_active {
+                        *imp.active_row.borrow_mut() = None;
+                    }
+
+                    let is_playing = imp
+                        .active_playing_row
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|active| active.as_ptr() == row.as_ptr());
+                    if is_playing {
+                        *imp.active_playing_row.borrow_mut() = None;
+                        if let Some(player) = imp.player.borrow().as_ref() {
+                            player.stop();
+                        }
+                    }
+
+                    let index = row.index();
+                    imp.isolate_at(index, false);
+                    imp.obj()
+                        .emit_by_name::<()>("row-deleted", &[&row.recording(), &(index as u32)]);
+                }
+            });
+        }
+
+        fn on_state_changed(&self, state: gst_player::PlayerState) {
+            if state == gst_player::PlayerState::Stopped {
+                if let Some(row) = self.active_playing_row.borrow().as_ref() {
+                    row.set_state(RowState::Paused);
+                    row.waveform().set_position_value(0.0);
+                }
+            } else if state == gst_player::PlayerState::Playing {
+                if let Some(row) = self.active_playing_row.borrow().as_ref() {
+                    row.set_state(RowState::Playing);
+                }
+            }
+        }
+
+        fn on_position_updated(&self, position: Option<gst::ClockTime>) {
+            if let Some(row) = self.active_playing_row.borrow().as_ref() {
+                if let Some(position) = position {
+                    let duration = row.recording().duration();
+                    if duration > 0 {
+                        row.waveform()
+                            .set_position_value(position.nseconds() as f64 / duration as f64);
+                    }
+                }
+            }
+        }
+
+        fn on_row_activated(&self, row: &Row) {
+            let active_editing = self
+                .active_row
+                .borrow()
+                .as_ref()
+                .is_some_and(|active| active.edit_mode() && active.expanded());
+
+            if (row.edit_mode() && row.expanded()) || active_editing {
+                return;
+            }
+
+            if let Some(active) = self.active_row.borrow().as_ref() {
+                if active.as_ptr() != row.as_ptr() {
+                    active.set_expanded(false);
+                    self.isolate_at(active.index(), false);
+                }
+            }
+
+            row.set_expanded(!row.expanded());
+            self.isolate_at(row.index(), row.expanded());
+
+            *self.active_row.borrow_mut() = Some(row.clone());
+        }
+
+        fn isolate_at(&self, index: i32, expanded: bool) {
+            let Some(list) = self.list.borrow().clone() else {
+                return;
+            };
+            let before = list.row_at_index(index - 1);
+            let current = list.row_at_index(index);
+            let after = list.row_at_index(index + 1);
+
+            for (row, class) in [
+                (current, "expanded"),
+                (before, "expanded-before"),
+                (after, "expanded-after"),
+            ] {
+                if let Some(row) = row {
+                    if expanded {
+                        row.add_css_class(class);
+                    } else {
+                        row.remove_css_class(class);
+                    }
+                }
+            }
+        }
+    }
+}
+
+glib::wrapper! {
+    pub struct RecordingsListWidget(ObjectSubclass<imp::RecordingsListWidget>)
+        @extends gtk::Widget, adw::Bin,
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
+}
+
+impl RecordingsListWidget {
+    pub fn new(model: &gio::ListStore, player: &gst_player::Player) -> Self {
+        let obj: Self = glib::Object::new();
+        obj.imp().setup(model, player);
+        obj
+    }
+
+    pub fn list(&self) -> Option<gtk::ListBox> {
+        self.imp().list.borrow().clone()
+    }
+
+    pub fn stop_editing(&self) {
+        if let Some(active) = self.imp().active_row.borrow().as_ref() {
+            if active.edit_mode() {
+                active.set_edit_mode(false);
+            }
+        }
+    }
+
+    pub fn connect_row_deleted<F: Fn(&Self, &Recording, u32) + 'static>(
+        &self,
+        f: F,
+    ) -> glib::SignalHandlerId {
+        self.connect_local("row-deleted", false, move |values| {
+            let obj = values[0].get::<RecordingsListWidget>().unwrap();
+            let recording = values[1].get::<Recording>().unwrap();
+            let index = values[2].get::<u32>().unwrap();
+            f(&obj, &recording, index);
+            None
+        })
+    }
+}
+
+fn seek_by(player: &gst_player::Player, row: &Row, seconds: i64) {
+    let position = player.position().unwrap_or(gst::ClockTime::ZERO).nseconds() as i64;
+    let duration = row.recording().duration();
+    let ten = 10_000_000_000i64;
+    let candidate = if seconds < 0 {
+        (position - ten).max(0)
+    } else {
+        position + ten
+    };
+    let target = if candidate < 0 || candidate > duration {
+        0
+    } else {
+        candidate
+    };
+    player.seek(gst::ClockTime::from_nseconds(target as u64));
+}

@@ -20,6 +20,8 @@ gettext-rs = { version = "0.8", features = ["gettext-system"] }
 gst = { package = "gstreamer", version = "0.25" }
 gst_pbutils = { package = "gstreamer-pbutils", version = "0.25" }
 gst_player = { package = "gstreamer-player", version = "0.25" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [build-dependencies]
 glib-build-tools = "0.22"

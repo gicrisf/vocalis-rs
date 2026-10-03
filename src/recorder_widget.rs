@@ -6,6 +6,7 @@ use gtk::subclass::prelude::*;
 use gtk::{gio, glib};
 
 use crate::recorder::Recorder;
+use crate::recording::Recording;
 use crate::utils::format_time;
 use crate::waveform::{WaveForm, WaveType};
 
@@ -70,7 +71,9 @@ mod imp {
                     glib::subclass::Signal::builder("paused").build(),
                     glib::subclass::Signal::builder("resumed").build(),
                     glib::subclass::Signal::builder("started").build(),
-                    glib::subclass::Signal::builder("stopped").build(),
+                    glib::subclass::Signal::builder("stopped")
+                        .param_types([Recording::static_type()])
+                        .build(),
                 ]
             })
         }
@@ -193,13 +196,23 @@ mod imp {
 
         fn on_stop(&self) {
             self.set_state(RecorderState::Stopped);
-            if let Some(recorder) = self.recorder.borrow().as_ref() {
-                let _file = recorder.stop();
-            }
+            let recording = self
+                .recorder
+                .borrow()
+                .as_ref()
+                .and_then(|recorder| recorder.stop());
             if let Some(waveform) = self.waveform.borrow().as_ref() {
                 waveform.cleanup();
             }
-            self.obj().emit_by_name::<()>("stopped", &[]);
+            match recording {
+                Some(recording) => {
+                    self.obj().emit_by_name::<()>("stopped", &[&recording]);
+                }
+                None => {
+                    let null: Option<Recording> = None;
+                    self.obj().emit_by_name::<()>("stopped", &[&null]);
+                }
+            }
         }
 
         fn on_cancel(&self) {
@@ -219,8 +232,8 @@ mod imp {
                 let recorder = widget.imp().recorder.borrow().clone();
                 widget.imp().set_state(RecorderState::Stopped);
                 if let Some(recorder) = recorder {
-                    if let Some(file) = recorder.stop() {
-                        let _ = file.trash(gio::Cancellable::NONE);
+                    if let Some(recording) = recorder.stop() {
+                        recording.delete();
                     }
                 }
                 if let Some(waveform) = widget.imp().waveform.borrow().as_ref() {
@@ -328,10 +341,14 @@ impl RecorderWidget {
         })
     }
 
-    pub fn connect_stopped<F: Fn(&Self) + 'static>(&self, f: F) -> glib::SignalHandlerId {
+    pub fn connect_stopped<F: Fn(&Self, Option<Recording>) + 'static>(
+        &self,
+        f: F,
+    ) -> glib::SignalHandlerId {
         self.connect_local("stopped", false, move |values| {
             let obj = values[0].get::<RecorderWidget>().unwrap();
-            f(&obj);
+            let recording = values[1].get::<Option<Recording>>().ok().flatten();
+            f(&obj, recording);
             None
         })
     }

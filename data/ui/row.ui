@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <template class="Gjs_Row" parent="GtkListBoxRow">
+  <template class="VocalisRow" parent="GtkListBoxRow">
     <property name="selectable">False</property>
     <style>
       <class name="recording-row"/>

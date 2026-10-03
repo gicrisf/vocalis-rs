@@ -7,6 +7,7 @@ use gtk::subclass::prelude::*;
 use gtk::{gio, glib};
 
 use crate::config;
+use crate::recording::Recording;
 
 #[allow(dead_code)]
 pub struct EncodingProfile {
@@ -307,7 +308,7 @@ impl Recorder {
         }
     }
 
-    pub fn stop(&self) -> Option<gio::File> {
+    pub fn stop(&self) -> Option<Recording> {
         let imp = self.imp();
 
         imp.update_state(Some(gst::State::Null));
@@ -321,8 +322,11 @@ impl Recorder {
         let file = imp.file.borrow().clone();
         if let Some(file) = file {
             if file.query_exists(gio::Cancellable::NONE) && !imp.peaks.borrow().is_empty() {
+                let peaks = imp.peaks.borrow().clone();
                 imp.peaks.borrow_mut().clear();
-                return Some(file);
+                let recording = Recording::new(&file);
+                recording.set_peaks(peaks);
+                return Some(recording);
             }
         }
 
@@ -364,11 +368,13 @@ mod tests {
         recorder.start();
         main_loop.run();
 
-        let file = recorder.stop().expect("no recording produced");
+        let recording = recorder.stop().expect("no recording produced");
+        let file = recording.file();
         let path = file.path().expect("recording has no path");
         let metadata = std::fs::metadata(&path).expect("recording file missing");
         assert!(metadata.len() > 0, "recording file is empty");
 
         let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(recording.waveform_cache().path().unwrap());
     }
 }

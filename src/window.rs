@@ -7,6 +7,10 @@ use gtk::{gio, glib};
 use crate::config;
 use crate::recorder::Recorder;
 use crate::recorder_widget::RecorderWidget;
+use crate::recording::Recording;
+use crate::recording_list::RecordingList;
+use crate::recording_list_widget::RecordingsListWidget;
+use crate::row::Row;
 
 #[allow(dead_code)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +24,7 @@ pub(crate) enum WindowState {
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default, gtk::CompositeTemplate)]
+    #[derive(Default, gtk::CompositeTemplate)]
     #[template(resource = "/app/drey/Vocalis/ui/window.ui")]
     pub struct Window {
         #[template_child(id = "mainStack")]
@@ -37,6 +41,14 @@ mod imp {
         state: Cell<WindowState>,
         recorder: RefCell<Option<Recorder>>,
         recorder_widget: RefCell<Option<RecorderWidget>>,
+        player: RefCell<Option<gst_player::Player>>,
+        recording_list: RefCell<Option<RecordingList>>,
+        recording_list_widget: RefCell<Option<RecordingsListWidget>>,
+        items_signal_id: RefCell<Option<glib::SignalHandlerId>>,
+        toast_undo: Cell<bool>,
+        undo_toasts: RefCell<Vec<adw::Toast>>,
+        undo_signal_id: RefCell<Option<glib::SignalHandlerId>>,
+        undo_action: RefCell<Option<gio::SimpleAction>>,
     }
 
     #[glib::object_subclass]
@@ -56,7 +68,38 @@ mod imp {
 
     impl ObjectImpl for Window {}
     impl WidgetImpl for Window {}
-    impl WindowImpl for Window {}
+
+    impl WindowImpl for Window {
+        fn close_request(&self) -> glib::Propagation {
+            for toast in self.undo_toasts.borrow().iter() {
+                toast.dismiss();
+            }
+
+            if let Some(list) = self.recording_list.borrow().as_ref() {
+                list.cancellable().cancel();
+
+                if let Some(id) = self.items_signal_id.borrow_mut().take() {
+                    list.store().disconnect(id);
+                }
+
+                let store = list.store();
+                for i in 0..store.n_items() {
+                    if let Some(item) = store.item(i) {
+                        if let Ok(recording) = item.downcast::<Recording>() {
+                            recording.stop_pipeline();
+                        }
+                    }
+                }
+            }
+
+            if let Some(recorder) = self.recorder.borrow().as_ref() {
+                recorder.stop();
+            }
+
+            glib::Propagation::Proceed
+        }
+    }
+
     impl ApplicationWindowImpl for Window {}
     impl AdwApplicationWindowImpl for Window {}
 
@@ -84,9 +127,9 @@ mod imp {
             });
 
             let window = self.obj().downgrade();
-            widget.connect_stopped(move |_| {
+            widget.connect_stopped(move |_, recording| {
                 if let Some(window) = window.upgrade() {
-                    window.imp().on_recorder_stopped();
+                    window.imp().on_recorder_stopped(recording);
                 }
             });
 
@@ -94,16 +137,165 @@ mod imp {
             *self.recorder_widget.borrow_mut() = Some(widget);
         }
 
+        pub fn setup_library(&self) {
+            let dispatcher = gst_player::PlayerGMainContextSignalDispatcher::new(None);
+            let player =
+                gst_player::Player::new(None::<gst_player::PlayerVideoRenderer>, Some(dispatcher));
+            player.connect_end_of_stream(|player| player.stop());
+
+            let recording_list = RecordingList::new();
+            let list_widget = RecordingsListWidget::new(recording_list.store(), &player);
+            self.column.set_child(Some(&list_widget));
+
+            let window = self.obj().downgrade();
+            list_widget.connect_row_deleted(move |_widget, recording, index| {
+                if let Some(window) = window.upgrade() {
+                    let imp = window.imp();
+                    if let Some(list) = imp.recording_list.borrow().as_ref() {
+                        list.store().remove(index);
+                    }
+
+                    let name = recording.name();
+                    let message = if !name.is_empty() {
+                        gettextrs::gettext("\"%s\" deleted").replace("%s", &name)
+                    } else {
+                        gettextrs::gettext("Recording deleted")
+                    };
+                    imp.send_notification(&message, recording, index);
+                }
+            });
+
+            let window = self.obj().downgrade();
+            let items_signal_id = recording_list.store().connect_items_changed(
+                move |store, _position, _removed, _added| {
+                    if let Some(window) = window.upgrade() {
+                        let imp = window.imp();
+                        if imp.state.get() != WindowState::Recorder {
+                            if store.n_items() == 0 {
+                                imp.set_state(WindowState::Empty);
+                            } else {
+                                imp.set_state(WindowState::List);
+                            }
+                        }
+                    }
+                },
+            );
+
+            let undo_action = gio::SimpleAction::new("undo", None);
+            self.obj().add_action(&undo_action);
+
+            let open_menu_action =
+                gio::SimpleAction::new_stateful("open-primary-menu", None, &true.to_variant());
+            open_menu_action.connect_activate(|action, _| {
+                let state = action
+                    .state()
+                    .and_then(|value| value.get::<bool>())
+                    .unwrap_or(false);
+                action.set_state(&(!state).to_variant());
+            });
+            self.obj().add_action(&open_menu_action);
+
+            *self.player.borrow_mut() = Some(player);
+            *self.recording_list.borrow_mut() = Some(recording_list);
+            *self.recording_list_widget.borrow_mut() = Some(list_widget);
+            *self.items_signal_id.borrow_mut() = Some(items_signal_id);
+            *self.undo_action.borrow_mut() = Some(undo_action);
+        }
+
         fn on_recorder_started(&self) {
+            if let Some(player) = self.player.borrow().as_ref() {
+                player.stop();
+            }
+            if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
+                list_widget.stop_editing();
+            }
             self.set_state(WindowState::Recorder);
         }
 
         fn on_recorder_canceled(&self) {
-            self.set_state(WindowState::Empty);
+            let empty = self
+                .recording_list
+                .borrow()
+                .as_ref()
+                .is_none_or(|list| list.store().n_items() == 0);
+            self.set_state(if empty {
+                WindowState::Empty
+            } else {
+                WindowState::List
+            });
         }
 
-        fn on_recorder_stopped(&self) {
-            self.set_state(WindowState::Empty);
+        fn on_recorder_stopped(&self, recording: Option<Recording>) {
+            if let Some(recording) = recording {
+                let store = self
+                    .recording_list
+                    .borrow()
+                    .as_ref()
+                    .map(|list| list.store().clone());
+                let list = self
+                    .recording_list_widget
+                    .borrow()
+                    .as_ref()
+                    .and_then(|widget| widget.list());
+
+                if let Some(store) = store {
+                    store.insert(0, &recording);
+                }
+                if let Some(list) = list {
+                    if let Some(row) = list
+                        .row_at_index(0)
+                        .and_then(|row| row.downcast::<Row>().ok())
+                    {
+                        row.set_edit_mode(true);
+                    }
+                }
+            }
+
+            self.set_state(WindowState::List);
+        }
+
+        fn send_notification(&self, message: &str, recording: &Recording, index: u32) {
+            let toast = adw::Toast::new(message);
+            let title = toast.title();
+
+            let window = self.obj().downgrade();
+            let dismiss_recording = recording.clone();
+            toast.connect_dismissed(move |_toast| {
+                if let Some(window) = window.upgrade() {
+                    let imp = window.imp();
+                    if !imp.toast_undo.get() {
+                        dismiss_recording.delete();
+                    }
+                    imp.toast_undo.set(false);
+                    imp.undo_toasts
+                        .borrow_mut()
+                        .retain(|toast| toast.title() != title);
+                }
+            });
+
+            if let Some(undo_action) = self.undo_action.borrow().as_ref() {
+                if let Some(id) = self.undo_signal_id.borrow_mut().take() {
+                    undo_action.disconnect(id);
+                }
+
+                let window = self.obj().downgrade();
+                let undo_recording = recording.clone();
+                let id = undo_action.connect_activate(move |_, _| {
+                    if let Some(window) = window.upgrade() {
+                        let imp = window.imp();
+                        if let Some(list) = imp.recording_list.borrow().as_ref() {
+                            list.store().insert(index, &undo_recording);
+                        }
+                        imp.toast_undo.set(true);
+                    }
+                });
+                *self.undo_signal_id.borrow_mut() = Some(id);
+            }
+
+            toast.set_action_name(Some("win.undo"));
+            toast.set_button_label(Some(&gettextrs::gettext("Undo")));
+            self.toast_overlay.add_toast(toast.clone());
+            self.undo_toasts.borrow_mut().push(toast);
         }
 
         pub(crate) fn set_state(&self, state: WindowState) {
@@ -142,6 +334,7 @@ impl Window {
         }
 
         window.imp().setup_recorder();
+        window.imp().setup_library();
         window.imp().set_state(WindowState::Empty);
 
         window

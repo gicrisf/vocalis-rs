@@ -40,6 +40,17 @@ mod imp {
                 .unwrap_or_else(|| Window::new(&app).upcast());
             window.present();
         }
+
+        fn handle_local_options(
+            &self,
+            options: &glib::VariantDict,
+        ) -> std::ops::ControlFlow<glib::ExitCode> {
+            if options.contains("version") {
+                println!("{}", config::VERSION);
+                return std::ops::ControlFlow::Break(glib::ExitCode::SUCCESS);
+            }
+            std::ops::ControlFlow::Continue(())
+        }
     }
 
     impl GtkApplicationImpl for Application {}
@@ -56,13 +67,27 @@ glib::wrapper! {
 
 impl Application {
     pub fn new() -> Self {
-        Object::builder()
+        let app: Self = Object::builder()
             .property("application-id", config::APP_ID)
             .property("resource-base-path", config::RESOURCE_BASE_PATH)
-            .build()
+            .build();
+
+        app.add_main_option(
+            "version",
+            glib::Char::from(b'v'),
+            glib::OptionFlags::NONE,
+            glib::OptionArg::None,
+            "Print version information and exit",
+            None,
+        );
+
+        app
     }
 
     fn init_actions(&self) {
+        self.add_action(&config::settings().create_action("audio-profile"));
+        self.add_action(&config::settings().create_action("audio-channel"));
+
         let about_action = gio::SimpleAction::new("about", None);
         let app = self.clone();
         about_action.connect_activate(move |_, _| app.show_about());
@@ -78,7 +103,20 @@ impl Application {
         self.add_action(&quit_action);
 
         self.set_accels_for_action("app.quit", &["<Primary>q"]);
+        self.set_accels_for_action("win.open-primary-menu", &["F10"]);
         self.set_accels_for_action("win.show-help-overlay", &["<Primary>question"]);
+        self.set_accels_for_action("recorder.start", &["<Primary>r"]);
+        self.set_accels_for_action("recorder.pause", &["space"]);
+        self.set_accels_for_action("recorder.resume", &["space"]);
+        self.set_accels_for_action("recorder.cancel", &["Delete"]);
+        self.set_accels_for_action("recorder.stop", &["s"]);
+        self.set_accels_for_action("recording.play", &["space"]);
+        self.set_accels_for_action("recording.pause", &["space"]);
+        self.set_accels_for_action("recording.seek-backward", &["b"]);
+        self.set_accels_for_action("recording.seek-forward", &["n"]);
+        self.set_accels_for_action("recording.rename", &["F2"]);
+        self.set_accels_for_action("recording.delete", &["Delete"]);
+        self.set_accels_for_action("recording.export", &["<Primary>s"]);
     }
 
     fn show_about(&self) {
