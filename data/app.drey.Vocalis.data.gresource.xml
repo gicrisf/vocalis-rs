@@ -11,4 +11,10 @@
     <file compressed="true" preprocess="xml-stripblanks" alias="skip-back-symbolic.svg">icons/skip-back-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="skip-forward-symbolic.svg">icons/skip-forward-symbolic.svg</file>
   </gresource>
+  <gresource prefix="/app/drey/Vocalis/icons/scalable/apps">
+    <file compressed="true" preprocess="xml-stripblanks" alias="app.drey.Vocalis.svg">icons/app.drey.Vocalis.svg</file>
+  </gresource>
+  <gresource prefix="/app/drey/Vocalis/icons/symbolic/apps">
+    <file compressed="true" preprocess="xml-stripblanks" alias="app.drey.Vocalis-symbolic.svg">icons/app.drey.Vocalis-symbolic.svg</file>
+  </gresource>
 </gresources>

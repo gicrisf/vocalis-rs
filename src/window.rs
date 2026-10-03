@@ -195,11 +195,74 @@ mod imp {
             });
             self.obj().add_action(&open_menu_action);
 
+            // Context-dependent transport keys (see Application::init_actions).
+            let play_pause_action = gio::SimpleAction::new("play-pause", None);
+            let window = self.obj().downgrade();
+            play_pause_action.connect_activate(move |_, _| {
+                if let Some(window) = window.upgrade() {
+                    window.imp().on_play_pause();
+                }
+            });
+            self.obj().add_action(&play_pause_action);
+
+            let delete_recording_action = gio::SimpleAction::new("delete-recording", None);
+            let window = self.obj().downgrade();
+            delete_recording_action.connect_activate(move |_, _| {
+                if let Some(window) = window.upgrade() {
+                    window.imp().on_delete_recording();
+                }
+            });
+            self.obj().add_action(&delete_recording_action);
+
             *self.player.borrow_mut() = Some(player);
             *self.recording_list.borrow_mut() = Some(recording_list);
             *self.recording_list_widget.borrow_mut() = Some(list_widget);
             *self.items_signal_id.borrow_mut() = Some(items_signal_id);
             *self.undo_action.borrow_mut() = Some(undo_action);
+        }
+
+        fn on_play_pause(&self) {
+            match self.state.get() {
+                WindowState::Recorder => {
+                    if let Some(widget) = self.recorder_widget.borrow().as_ref() {
+                        let group = widget.actions_group();
+                        for name in ["pause", "resume"] {
+                            if let Some(action) = group.lookup_action(name) {
+                                if action.is_enabled() {
+                                    action.activate(None);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+                WindowState::List => {
+                    if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
+                        list_widget.toggle_playback();
+                    }
+                }
+                WindowState::Empty => {}
+            }
+        }
+
+        fn on_delete_recording(&self) {
+            match self.state.get() {
+                WindowState::Recorder => {
+                    if let Some(widget) = self.recorder_widget.borrow().as_ref() {
+                        if let Some(action) = widget.actions_group().lookup_action("cancel") {
+                            if action.is_enabled() {
+                                action.activate(None);
+                            }
+                        }
+                    }
+                }
+                WindowState::List => {
+                    if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
+                        list_widget.delete_active();
+                    }
+                }
+                WindowState::Empty => {}
+            }
         }
 
         fn on_recorder_started(&self) {
@@ -307,6 +370,13 @@ mod imp {
 
             self.main_stack.set_visible_child_name(visible_child);
             self.toolbar_view.set_reveal_top_bars(reveal_top_bars);
+
+            // Only the recordings list owns `recording.*` shortcuts; while the
+            // recorder is shown we let the `recorder.*` accelerators take over.
+            if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
+                list_widget.set_shortcuts_active(state == WindowState::List);
+            }
+
             self.state.set(state);
         }
     }

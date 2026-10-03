@@ -105,17 +105,17 @@ impl Application {
         self.set_accels_for_action("app.quit", &["<Primary>q"]);
         self.set_accels_for_action("win.open-primary-menu", &["F10"]);
         self.set_accels_for_action("win.show-help-overlay", &["<Primary>question"]);
+        // `space` and `Delete` are context-dependent (recorder vs playback), and GTK
+        // accelerators stop at the first matching action regardless of its enabled
+        // state, so they can't be bound to both `recorder.*` and `recording.*`.
+        // A single `win.*` action dispatches based on the window state instead.
+        self.set_accels_for_action("win.play-pause", &["space"]);
+        self.set_accels_for_action("win.delete-recording", &["Delete"]);
         self.set_accels_for_action("recorder.start", &["<Primary>r"]);
-        self.set_accels_for_action("recorder.pause", &["space"]);
-        self.set_accels_for_action("recorder.resume", &["space"]);
-        self.set_accels_for_action("recorder.cancel", &["Delete"]);
         self.set_accels_for_action("recorder.stop", &["s"]);
-        self.set_accels_for_action("recording.play", &["space"]);
-        self.set_accels_for_action("recording.pause", &["space"]);
         self.set_accels_for_action("recording.seek-backward", &["b"]);
         self.set_accels_for_action("recording.seek-forward", &["n"]);
         self.set_accels_for_action("recording.rename", &["F2"]);
-        self.set_accels_for_action("recording.delete", &["Delete"]);
         self.set_accels_for_action("recording.export", &["<Primary>s"]);
     }
 

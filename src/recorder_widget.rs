@@ -162,6 +162,9 @@ mod imp {
             *self.resume_action.borrow_mut() = Some(resume);
             *self.cancel_action.borrow_mut() = Some(cancel);
             *self.actions_group.borrow_mut() = Some(group);
+
+            // Initial action enablement: only "start" is available before recording.
+            self.set_state(RecorderState::Stopped);
         }
 
         fn on_pause(&self) {

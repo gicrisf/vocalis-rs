@@ -289,7 +289,10 @@ mod imp {
             });
             group.add_action(&seek_forward_action);
 
-            self.obj().insert_action_group("recording", Some(&group));
+            // The "recording" group is inserted on the toplevel window by
+            // RecordingsListWidget for the active row (see `sync_window_actions`),
+            // so that application accelerators can reach these actions regardless
+            // of focus. The row's buttons resolve them through the window.
 
             *self.save_rename_action.borrow_mut() = Some(save_rename_action);
             *self.rename_action.borrow_mut() = Some(rename_action);
@@ -428,6 +431,10 @@ impl Row {
 
     pub fn recording(&self) -> Recording {
         self.imp().recording.borrow().clone().unwrap()
+    }
+
+    pub fn action_group(&self) -> Option<gio::SimpleActionGroup> {
+        self.imp().action_group.borrow().clone()
     }
 
     pub fn waveform(&self) -> WaveForm {

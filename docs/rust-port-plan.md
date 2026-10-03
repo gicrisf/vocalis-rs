@@ -73,6 +73,18 @@ packaging are implemented and verified to build/run. M6 is a parity/interactive-
     `Gtk.FileChooserNative`. It needs the same `org.gtk.gtk4.Settings.FileChooser` schema, which
     is why the dev shell must expose GTK4's GSettings schemas (see §9.5). `Recording::save` now
     logs copy success/failure instead of swallowing errors.
+12. **`recording.*` accelerators fixed.** Upstream even notes `TODO: Fix recording.* keybindings`:
+    the actions live in each row's action map, so app accelerators only reached them when focus was
+    inside that row. `RecordingsListWidget::sync_window_actions` now inserts the **active row's**
+    `recording` action group on the toplevel, so `b`/`n` (seek), `F2`, `Ctrl+S` resolve regardless
+    of focus; the group is removed while the recorder is shown.
+13. **`space`/`Delete` are window-dispatched.** Those keys are context-dependent (recorder vs
+    playback), and GTK accelerator activation stops at the first matching action in the muxer
+    **regardless of its enabled state** — so binding `space` to both `recorder.pause/resume` and
+    `recording.play/pause` could never fall through. They now map to single `win.play-pause` /
+    `win.delete-recording` actions that dispatch on the window state (recorder pause/resume, or the
+    active row's play/pause/delete). `RecorderWidget` also now starts in the `Stopped` state so
+    `pause`/`stop`/`resume`/`cancel` are disabled before recording.
 
 ---
 
@@ -476,6 +488,9 @@ compilation, tests, and the dev loop; the Nix flake owns installation of data an
 - **Translations in dev:** uninstalled runs show source strings. For testing a locale, compile
   `.mo` files into a local tree and have `main.rs` call `gettextrs::bindtextdomain(APP_ID, dir)`
   with `dir` taken from `VOCALIS_LOCALEDIR` when set (falls back to the system locale dir).
+- **Icon theme in dev:** include `adwaita-icon-theme`/`hicolor-icon-theme` in the dev shell so
+  GTK's default "Adwaita" theme resolves themed symbolic icons; the package appends their `share`
+  dirs to the wrapper's `XDG_DATA_DIRS` in `preFixup`.
 - Optionally add a **thin Meson layer later, only if you decide to upstream**; it is not part of
   this plan's build path.
 
@@ -555,7 +570,10 @@ Port is "done" when all of the following match the TS app. Markers: `[x]` verifi
 - [~] GSettings profile/channel actions and their radio-toggles in the primary menu.
       (Actions + schema wired; menu toggling is interactive.)
 - [~] Keyboard shortcuts (application.ts:111-128) including `F10`, `Ctrl+?`, `Ctrl+Q`, space, `s`,
-      Delete, F2, `Ctrl+S`, `b`/`n`. (All registered; behavior is interactive.)
+      Delete, F2, `Ctrl+S`, `b`/`n`. (All registered. `recording.*` shortcuts now work from
+      anywhere via the hoisted active-row action group, and `space`/`Delete` are dispatched by
+      `win.*` actions to avoid the recorder/playback accelerator collision — see §0.1.12–13.
+      Needs interactive re-check.)
 - [x] Missing-plugin and error logging paths. (Implemented; not triggered during tests.)
 - [x] Translations load (gettext domain = app id) and markup time strings render.
       (64 `.mo` locales installed by the flake; `format_time` emits the same markup.)
@@ -624,6 +642,14 @@ Each item carries its resolution status from the implementation.
     `GSETTINGS_SCHEMA_DIR` must include `<gtk4>/…/glib-2.0/schemas` and the desktop-schemas dir;
     otherwise file dialogs abort (`org.gtk.gtk4.Settings.FileChooser` not installed). Re-enter
     `nix develop` after editing the shellHook for it to take effect.
+14. **Icon theme** — **resolved.** GTK's default theme is "Adwaita"; without `adwaita-icon-theme`
+    (plus `hicolor-icon-theme`) the themed symbolic icons (`media-record-symbolic` on the
+    top-left Record button, `open-menu-symbolic`, `user-trash-symbolic`, …) don't resolve. Added
+    to the dev shell (via `XDG_DATA_DIRS`) and, for the package, appended to the wrapper's
+    `XDG_DATA_DIRS` in `preFixup` (`wrapGAppsHook` only forwards `gsettings-schemas` dirs).
+    Separately, the app's own icons are now bundled in the data gresource under
+    `<resource-base-path>/icons/{scalable,symbolic}/apps/`; GTK auto-registers that path and uses
+    the app-id icon as the default window icon (and for the empty-state `AdwStatusPage`).
 
 ---
 

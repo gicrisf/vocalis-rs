@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::OnceLock;
 
 use adw::prelude::*;
@@ -17,6 +17,7 @@ mod imp {
         pub list: RefCell<Option<gtk::ListBox>>,
         pub active_row: RefCell<Option<Row>>,
         active_playing_row: RefCell<Option<Row>>,
+        shortcuts_active: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -215,6 +216,7 @@ mod imp {
 
                     let index = row.index();
                     imp.isolate_at(index, false);
+                    imp.sync_window_actions();
                     imp.obj()
                         .emit_by_name::<()>("row-deleted", &[&row.recording(), &(index as u32)]);
                 }
@@ -268,6 +270,74 @@ mod imp {
             self.isolate_at(row.index(), row.expanded());
 
             *self.active_row.borrow_mut() = Some(row.clone());
+            self.sync_window_actions();
+        }
+
+        /// Put the active row's `recording` action group on the toplevel so that
+        /// application accelerators (`space`, `b`, `n`, …) reach it regardless of
+        /// which widget currently has focus. Called whenever the active row or the
+        /// list's visibility changes.
+        pub fn sync_window_actions(&self) {
+            let Some(window) = self
+                .obj()
+                .root()
+                .and_then(|root| root.downcast::<gtk::Window>().ok())
+            else {
+                return;
+            };
+
+            let group = if self.shortcuts_active.get() {
+                self.active_row
+                    .borrow()
+                    .as_ref()
+                    .and_then(|row| row.action_group())
+            } else {
+                None
+            };
+
+            match group {
+                Some(group) => window.insert_action_group("recording", Some(&group)),
+                None => window.insert_action_group("recording", None::<&gio::SimpleActionGroup>),
+            }
+        }
+
+        /// Toggle play/pause on the active row (used by the `win.play-pause` action).
+        pub fn toggle_playback(&self) {
+            let row = self
+                .active_playing_row
+                .borrow()
+                .clone()
+                .or_else(|| self.active_row.borrow().clone());
+            if let Some(row) = row {
+                if let Some(group) = row.action_group() {
+                    for name in ["pause", "play"] {
+                        if let Some(action) = group.lookup_action(name) {
+                            if action.is_enabled() {
+                                action.activate(None);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// Delete the active row (used by the `win.delete-recording` action).
+        pub fn delete_active(&self) {
+            if let Some(row) = self.active_row.borrow().clone() {
+                if let Some(group) = row.action_group() {
+                    if let Some(action) = group.lookup_action("delete") {
+                        if action.is_enabled() {
+                            action.activate(None);
+                        }
+                    }
+                }
+            }
+        }
+
+        pub fn set_shortcuts_active(&self, active: bool) {
+            self.shortcuts_active.set(active);
+            self.sync_window_actions();
         }
 
         fn isolate_at(&self, index: i32, expanded: bool) {
@@ -318,6 +388,18 @@ impl RecordingsListWidget {
                 active.set_edit_mode(false);
             }
         }
+    }
+
+    pub fn set_shortcuts_active(&self, active: bool) {
+        self.imp().set_shortcuts_active(active);
+    }
+
+    pub fn toggle_playback(&self) {
+        self.imp().toggle_playback();
+    }
+
+    pub fn delete_active(&self) {
+        self.imp().delete_active();
     }
 
     pub fn connect_row_deleted<F: Fn(&Self, &Recording, u32) + 'static>(

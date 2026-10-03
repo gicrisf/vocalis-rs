@@ -25,6 +25,8 @@
           gst_all_1.gst-plugins-bad
           gst_all_1.gst-plugins-ugly
           gsettings-desktop-schemas
+          adwaita-icon-theme
+          hicolor-icon-theme
         ];
     in
     {
@@ -141,6 +143,12 @@
             preFixup = ''
               # Point gettext at the packaged .mo files (read by main.rs).
               gappsWrapperArgs+=(--set VOCALIS_LOCALEDIR "$out/share/locale")
+
+              # Make the icon themes discoverable at runtime (GTK's default theme
+              # is "Adwaita"; without it, themed icons like media-record-symbolic
+              # don't resolve). wrapGAppsHook only forwards gsettings-schemas dirs.
+              gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : "${pkgs.adwaita-icon-theme}/share")
+              gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : "${pkgs.hicolor-icon-theme}/share")
 
               gtk4-update-icon-cache -q -t -f $out/share/icons/hicolor || true
               update-desktop-database -q $out/share/applications || true
