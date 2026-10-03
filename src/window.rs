@@ -71,9 +71,13 @@ mod imp {
 
     impl WindowImpl for Window {
         fn close_request(&self) -> glib::Propagation {
-            for toast in self.undo_toasts.borrow().iter() {
+            // Clone first: `dismiss()` emits `dismissed` synchronously, and the
+            // handler mutates `undo_toasts`, so we must not hold a borrow here.
+            let toasts: Vec<adw::Toast> = self.undo_toasts.borrow().clone();
+            for toast in toasts {
                 toast.dismiss();
             }
+            self.undo_toasts.borrow_mut().clear();
 
             if let Some(list) = self.recording_list.borrow().as_ref() {
                 list.cancellable().cancel();
@@ -93,7 +97,9 @@ mod imp {
             }
 
             if let Some(recorder) = self.recorder.borrow().as_ref() {
-                recorder.stop();
+                if recorder.is_active() {
+                    recorder.stop();
+                }
             }
 
             glib::Propagation::Proceed

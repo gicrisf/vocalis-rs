@@ -308,6 +308,14 @@ impl Recorder {
         }
     }
 
+    /// Whether the pipeline is currently playing or paused (i.e. worth stopping).
+    pub fn is_active(&self) -> bool {
+        matches!(
+            self.imp().pipe_state.get(),
+            Some(gst::State::Playing | gst::State::Paused)
+        )
+    }
+
     pub fn stop(&self) -> Option<Recording> {
         let imp = self.imp();
 
