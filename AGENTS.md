@@ -46,6 +46,11 @@ The system lacks GTK/`pkg-config`; always run through the flake dev shell:
 - App id is compile-time: `cfg!(feature = "development")` → `app.drey.Vocalis.Devel`. Runtime
   gettext dir/version come from `VOCALIS_LOCALEDIR` / `VOCALIS_VERSION_SUFFIX` (set by Meson).
 - `.blp` templates use `Vocalis*` GType names and camelCase ids bound via `#[template_child(id = "…")]`.
+- `window.blp` is the composition entrypoint: it names the leaves directly —
+  `$VocalisRecorderWidget` as the `recorder` `StackPage`, and `$VocalisRecordingsListWidget` (whose
+  `Gtk.ListBox` container lives in `recordings-list.blp`) inside the `Adw.Clamp`. `Window::new`
+  registers both GTypes (`static_type()`) before building the template, or GtkBuilder cannot resolve
+  them. Per-item `Row`s (`Gtk.ListBox::bind_model`) and the custom `WaveForm` are still built in code.
 - `Application::startup` clears the legacy `gtk-application-prefer-dark-theme` flag and sets
   `AdwStyleManager:color-scheme`; `waveform.rs` reads accent/high-contrast from `AdwStyleManager`.
 - Keep GStreamer (gstreamer-rs) and the GLib main loop; do **not** introduce `tokio` or replace

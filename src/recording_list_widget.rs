@@ -11,10 +11,12 @@ use crate::row::{Row, RowState};
 mod imp {
     use super::*;
 
-    #[derive(Default)]
+    #[derive(Default, gtk::CompositeTemplate)]
+    #[template(resource = "/app/drey/Vocalis/ui/recordings-list.ui")]
     pub struct RecordingsListWidget {
         player: RefCell<Option<gst_player::Player>>,
-        pub list: RefCell<Option<gtk::ListBox>>,
+        #[template_child(id = "list")]
+        pub list: TemplateChild<gtk::ListBox>,
         pub active_row: RefCell<Option<Row>>,
         active_playing_row: RefCell<Option<Row>>,
         shortcuts_active: Cell<bool>,
@@ -25,6 +27,14 @@ mod imp {
         const NAME: &'static str = "VocalisRecordingsListWidget";
         type Type = super::RecordingsListWidget;
         type ParentType = adw::Bin;
+
+        fn class_init(klass: &mut Self::Class) {
+            Self::bind_template(klass);
+        }
+
+        fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
+            obj.init_template();
+        }
     }
 
     impl ObjectImpl for RecordingsListWidget {
@@ -43,18 +53,9 @@ mod imp {
 
     impl RecordingsListWidget {
         pub fn setup(&self, model: &gio::ListStore, player: &gst_player::Player) {
-            let list = gtk::ListBox::new();
-            list.set_valign(gtk::Align::Start);
-            list.set_margin_start(8);
-            list.set_margin_end(8);
-            list.set_margin_top(12);
-            list.set_margin_bottom(12);
-            list.set_activate_on_single_click(true);
-            list.add_css_class("boxed-list");
-            self.obj().set_child(Some(&list));
+            let list = self.list.get();
 
             *self.player.borrow_mut() = Some(player.clone());
-            *self.list.borrow_mut() = Some(list.clone());
 
             let widget = glib::SendWeakRef::from(self.obj().downgrade());
             player.connect_state_changed(move |_player, state| {
@@ -372,9 +373,7 @@ mod imp {
         }
 
         fn isolate_at(&self, index: i32, expanded: bool) {
-            let Some(list) = self.list.borrow().clone() else {
-                return;
-            };
+            let list = self.list.get();
             let before = list.row_at_index(index - 1);
             let current = list.row_at_index(index);
             let after = list.row_at_index(index + 1);
@@ -403,14 +402,12 @@ glib::wrapper! {
 }
 
 impl RecordingsListWidget {
-    pub fn new(model: &gio::ListStore, player: &gst_player::Player) -> Self {
-        let obj: Self = glib::Object::new();
-        obj.imp().setup(model, player);
-        obj
+    pub fn setup(&self, model: &gio::ListStore, player: &gst_player::Player) {
+        self.imp().setup(model, player);
     }
 
     pub fn list(&self) -> Option<gtk::ListBox> {
-        self.imp().list.borrow().clone()
+        Some(self.imp().list.get())
     }
 
     pub fn stop_editing(&self) {

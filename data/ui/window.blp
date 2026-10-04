@@ -67,11 +67,19 @@ template $VocalisWindow: Adw.ApplicationWindow {
             child: Viewport {
               scroll-to-focus: true;
 
-              child: Adw.Clamp column {
+              child: Adw.Clamp {
                 maximum-size: 650;
+
+                child: $VocalisRecordingsListWidget recordingsList {};
               };
             };
           };
+        }
+
+        StackPage {
+          name: "recorder";
+
+          child: $VocalisRecorderWidget recorderWidget {};
         }
       };
     }

@@ -323,10 +323,8 @@ glib::wrapper! {
 }
 
 impl RecorderWidget {
-    pub fn new(recorder: &Recorder) -> Self {
-        let obj: Self = glib::Object::builder().build();
-        obj.imp().setup(recorder);
-        obj
+    pub fn setup(&self, recorder: &Recorder) {
+        self.imp().setup(recorder);
     }
 
     pub fn actions_group(&self) -> gio::SimpleActionGroup {

@@ -5,6 +5,7 @@ data/app.drey.Vocalis.metainfo.xml.in.in
 data/app.drey.Vocalis.gschema.xml.in
 data/ui/help-overlay.blp
 data/ui/recorder.blp
+data/ui/recordings-list.blp
 data/ui/row.blp
 data/ui/window.blp
 src/application.rs

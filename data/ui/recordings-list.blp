@@ -1,0 +1,17 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $VocalisRecordingsListWidget: Adw.Bin {
+  ListBox list {
+    valign: start;
+    margin-start: 8;
+    margin-end: 8;
+    margin-top: 12;
+    margin-bottom: 12;
+    activate-on-single-click: true;
+
+    styles [
+      "boxed-list",
+    ]
+  }
+}

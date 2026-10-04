@@ -31,8 +31,10 @@ mod imp {
         pub main_stack: TemplateChild<gtk::Stack>,
         #[template_child(id = "emptyPage")]
         pub empty_page: TemplateChild<adw::StatusPage>,
-        #[template_child(id = "column")]
-        pub column: TemplateChild<adw::Clamp>,
+        #[template_child(id = "recordingsList")]
+        pub recordings_list: TemplateChild<RecordingsListWidget>,
+        #[template_child(id = "recorderWidget")]
+        pub recorder_widget: TemplateChild<RecorderWidget>,
         #[template_child(id = "toastOverlay")]
         pub toast_overlay: TemplateChild<adw::ToastOverlay>,
         #[template_child(id = "toolbarView")]
@@ -40,10 +42,8 @@ mod imp {
 
         state: Cell<WindowState>,
         recorder: RefCell<Option<Recorder>>,
-        recorder_widget: RefCell<Option<RecorderWidget>>,
         player: RefCell<Option<gst_player::Player>>,
         recording_list: RefCell<Option<RecordingList>>,
-        recording_list_widget: RefCell<Option<RecordingsListWidget>>,
         items_signal_id: RefCell<Option<glib::SignalHandlerId>>,
         toast_undo: Cell<bool>,
         undo_toasts: RefCell<Vec<adw::Toast>>,
@@ -112,9 +112,9 @@ mod imp {
     impl Window {
         pub fn setup_recorder(&self) {
             let recorder = Recorder::new();
-            let widget = RecorderWidget::new(&recorder);
+            let widget = self.recorder_widget.get();
 
-            self.main_stack.add_named(&widget, Some("recorder"));
+            widget.setup(&recorder);
             self.obj()
                 .insert_action_group("recorder", Some(&widget.actions_group()));
 
@@ -143,7 +143,6 @@ mod imp {
             ));
 
             *self.recorder.borrow_mut() = Some(recorder);
-            *self.recorder_widget.borrow_mut() = Some(widget);
         }
 
         pub fn setup_library(&self) {
@@ -153,8 +152,8 @@ mod imp {
             player.connect_end_of_stream(|player| player.stop());
 
             let recording_list = RecordingList::new();
-            let list_widget = RecordingsListWidget::new(recording_list.store(), &player);
-            self.column.set_child(Some(&list_widget));
+            let list_widget = self.recordings_list.get();
+            list_widget.setup(recording_list.store(), &player);
 
             list_widget.connect_row_deleted(glib::clone!(
                 #[weak(rename_to = window)]
@@ -227,7 +226,6 @@ mod imp {
 
             *self.player.borrow_mut() = Some(player);
             *self.recording_list.borrow_mut() = Some(recording_list);
-            *self.recording_list_widget.borrow_mut() = Some(list_widget);
             *self.items_signal_id.borrow_mut() = Some(items_signal_id);
             *self.undo_action.borrow_mut() = Some(undo_action);
         }
@@ -235,22 +233,18 @@ mod imp {
         fn on_play_pause(&self) {
             match self.state.get() {
                 WindowState::Recorder => {
-                    if let Some(widget) = self.recorder_widget.borrow().as_ref() {
-                        let group = widget.actions_group();
-                        for name in ["pause", "resume"] {
-                            if let Some(action) = group.lookup_action(name) {
-                                if action.is_enabled() {
-                                    action.activate(None);
-                                    return;
-                                }
+                    let group = self.recorder_widget.get().actions_group();
+                    for name in ["pause", "resume"] {
+                        if let Some(action) = group.lookup_action(name) {
+                            if action.is_enabled() {
+                                action.activate(None);
+                                return;
                             }
                         }
                     }
                 }
                 WindowState::List => {
-                    if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
-                        list_widget.toggle_playback();
-                    }
+                    self.recordings_list.get().toggle_playback();
                 }
                 WindowState::Empty => {}
             }
@@ -259,18 +253,15 @@ mod imp {
         fn on_delete_recording(&self) {
             match self.state.get() {
                 WindowState::Recorder => {
-                    if let Some(widget) = self.recorder_widget.borrow().as_ref() {
-                        if let Some(action) = widget.actions_group().lookup_action("cancel") {
-                            if action.is_enabled() {
-                                action.activate(None);
-                            }
+                    let widget = self.recorder_widget.get();
+                    if let Some(action) = widget.actions_group().lookup_action("cancel") {
+                        if action.is_enabled() {
+                            action.activate(None);
                         }
                     }
                 }
                 WindowState::List => {
-                    if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
-                        list_widget.delete_active();
-                    }
+                    self.recordings_list.get().delete_active();
                 }
                 WindowState::Empty => {}
             }
@@ -280,9 +271,7 @@ mod imp {
             if let Some(player) = self.player.borrow().as_ref() {
                 player.stop();
             }
-            if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
-                list_widget.stop_editing();
-            }
+            self.recordings_list.get().stop_editing();
             self.set_state(WindowState::Recorder);
         }
 
@@ -306,11 +295,7 @@ mod imp {
                     .borrow()
                     .as_ref()
                     .map(|list| list.store().clone());
-                let list = self
-                    .recording_list_widget
-                    .borrow()
-                    .as_ref()
-                    .and_then(|widget| widget.list());
+                let list = self.recordings_list.get().list();
 
                 if let Some(store) = store {
                     store.insert(0, &recording);
@@ -386,9 +371,9 @@ mod imp {
 
             // Only the recordings list owns `recording.*` shortcuts; while the
             // recorder is shown we let the `recorder.*` accelerators take over.
-            if let Some(list_widget) = self.recording_list_widget.borrow().as_ref() {
-                list_widget.set_shortcuts_active(state == WindowState::List);
-            }
+            self.recordings_list
+                .get()
+                .set_shortcuts_active(state == WindowState::List);
 
             self.state.set(state);
         }
@@ -404,6 +389,11 @@ glib::wrapper! {
 
 impl Window {
     pub fn new(app: &impl IsA<adw::Application>) -> Self {
+        // Register the leaf GTypes before the window template is loaded so that
+        // GtkBuilder can resolve `$VocalisRecorderWidget` / `$VocalisRecordingsListWidget`.
+        RecorderWidget::static_type();
+        RecordingsListWidget::static_type();
+
         let window: Self = glib::Object::builder().property("application", app).build();
 
         window.set_icon_name(Some(config::APP_ID));
