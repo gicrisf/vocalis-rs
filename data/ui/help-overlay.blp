@@ -1,0 +1,73 @@
+using Gtk 4.0;
+
+ShortcutsWindow help_overlay {
+  modal: true;
+
+  ShortcutsSection {
+    section-name: "shortcuts";
+    max-height: 10;
+
+    ShortcutsGroup {
+      title: C_("shortcut window", "General");
+
+      ShortcutsShortcut {
+        action-name: "recorder.start";
+        title: C_("shortcut window", "Record");
+      }
+
+      ShortcutsShortcut {
+        action-name: "recorder.stop";
+        title: C_("shortcut window", "Stop Recording");
+      }
+
+      ShortcutsShortcut {
+        action-name: "win.play-pause";
+        title: C_("shortcut window", "Play / Pause / Resume");
+      }
+
+      ShortcutsShortcut {
+        action-name: "win.delete-recording";
+        title: C_("shortcut window", "Delete");
+      }
+
+      ShortcutsShortcut {
+        action-name: "win.open-primary-menu";
+        title: C_("shortcut window", "Open Main Menu");
+      }
+
+      ShortcutsShortcut {
+        action-name: "win.show-help-overlay";
+        title: C_("shortcut window", "Keyboard Shortcuts");
+      }
+
+      ShortcutsShortcut {
+        action-name: "app.quit";
+        title: C_("shortcut window", "Quit");
+      }
+    }
+
+    ShortcutsGroup {
+      title: C_("shortcut window", "Playback");
+
+      ShortcutsShortcut {
+        action-name: "recording.seek-backward";
+        title: C_("shortcut window", "Seek Backward");
+      }
+
+      ShortcutsShortcut {
+        action-name: "recording.seek-forward";
+        title: C_("shortcut window", "Seek Forward");
+      }
+
+      ShortcutsShortcut {
+        action-name: "recording.rename";
+        title: C_("shortcut window", "Rename");
+      }
+
+      ShortcutsShortcut {
+        action-name: "recording.export";
+        title: C_("shortcut window", "Export");
+      }
+    }
+  }
+}

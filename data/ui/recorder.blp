@@ -1,0 +1,111 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $VocalisRecorderWidget: Box {
+  WindowHandle {
+    hexpand: true;
+
+    Box {
+      margin-top: 24;
+      margin-bottom: 24;
+      orientation: vertical;
+
+      Box recorderBox {
+        height-request: 230;
+        valign: center;
+        orientation: vertical;
+
+        Adw.Bin recorderTimeBin {
+          styles [
+            "recorder-time-bin",
+          ]
+
+          child: Label recorderTime {
+            margin-top: 18;
+            use-markup: true;
+
+            styles [
+              "numeric",
+              "recorder-time-label",
+            ]
+          };
+        }
+      }
+
+      Box {
+        halign: center;
+        valign: center;
+        margin-top: 8;
+        spacing: 18;
+
+        Stack playbackStack {
+          StackPage {
+            name: "recorder-start";
+
+            child: Button resumeBtn {
+              receives-default: true;
+              tooltip-text: _("Resume Recording");
+              halign: center;
+              valign: center;
+              action-name: "recorder.resume";
+              icon-name: "media-playback-start-symbolic";
+
+              styles [
+                "circular",
+              ]
+            };
+          }
+
+          StackPage {
+            name: "recorder-pause";
+
+            child: Button pauseBtn {
+              receives-default: true;
+              tooltip-text: _("Pause Recording");
+              halign: center;
+              valign: center;
+              action-name: "recorder.pause";
+              icon-name: "media-playback-pause-symbolic";
+
+              styles [
+                "circular",
+              ]
+            };
+          }
+        }
+
+        Button {
+          receives-default: true;
+          tooltip-text: _("Stop Recording");
+          halign: center;
+          valign: center;
+          action-name: "recorder.stop";
+
+          Image {
+            icon-name: "media-playback-stop-symbolic";
+            pixel-size: 24;
+          }
+
+          styles [
+            "destructive-action",
+            "circular",
+            "large",
+          ]
+        }
+
+        Button {
+          receives-default: true;
+          tooltip-text: _("Delete Recording");
+          halign: center;
+          valign: center;
+          action-name: "recorder.cancel";
+          icon-name: "user-trash-symbolic";
+
+          styles [
+            "circular",
+          ]
+        }
+      }
+    }
+  }
+}

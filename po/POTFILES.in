@@ -3,10 +3,10 @@
 data/app.drey.Vocalis.desktop.in.in
 data/app.drey.Vocalis.metainfo.xml.in.in
 data/app.drey.Vocalis.gschema.xml.in
-data/ui/help-overlay.ui
-data/ui/recorder.ui
-data/ui/row.ui
-data/ui/window.ui
+data/ui/help-overlay.blp
+data/ui/recorder.blp
+data/ui/row.blp
+data/ui/window.blp
 src/application.rs
 src/recorder.rs
 src/recorder_widget.rs

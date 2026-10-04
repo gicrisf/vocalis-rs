@@ -43,6 +43,7 @@
               rust-analyzer
               clippy
               rustfmt
+              blueprint-compiler
               meson
               ninja
               pkg-config
@@ -86,6 +87,7 @@
               pkg-config
               wrapGAppsHook4
               gobject-introspection
+              blueprint-compiler
               glib
               libxml2
               gettext

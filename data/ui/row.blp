@@ -1,0 +1,285 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $VocalisRow: ListBoxRow {
+  selectable: false;
+
+  styles [
+    "recording-row",
+  ]
+
+  Box {
+    margin-top: 12;
+    margin-bottom: 12;
+    orientation: vertical;
+
+    Stack mainStack {
+      margin-start: 14;
+      margin-end: 14;
+
+      StackPage {
+        name: "display";
+
+        child: Box {
+          valign: center;
+          hexpand: true;
+
+          Box {
+            orientation: vertical;
+
+            Label name {
+              ellipsize: end;
+              single-line-mode: true;
+              xalign: 0;
+
+              styles [
+                "heading",
+              ]
+            }
+
+            Label date {
+              margin-top: 4;
+              xalign: 0;
+
+              styles [
+                "subtitle",
+              ]
+            }
+          }
+
+          Label duration {
+            hexpand: true;
+            halign: end;
+            use-markup: true;
+
+            styles [
+              "numeric",
+            ]
+          }
+        };
+      }
+
+      StackPage {
+        name: "edit";
+
+        child: Entry entry {
+          activates-default: true;
+        };
+      }
+    }
+
+    Revealer revealer {
+      transition-duration: 250;
+      transition-type: slide_down;
+
+      Box {
+        orientation: vertical;
+
+        Stack waveformStack {
+          transition-type: crossfade;
+
+          StackPage {
+            name: "loading";
+
+            child: Spinner {
+              spinning: true;
+            };
+          }
+        }
+
+        Box {
+          margin-start: 14;
+          margin-end: 14;
+          margin-top: 18;
+
+          Box deleteBtnBox {
+            Button {
+              valign: center;
+              halign: center;
+              action-name: "recording.delete";
+              receives-default: true;
+              tooltip-text: _("Delete");
+              icon-name: "user-trash-symbolic";
+
+              styles [
+                "circular",
+              ]
+            }
+          }
+
+          Box playbackControls {
+            hexpand: true;
+            halign: end;
+            spacing: 18;
+
+            Button {
+              valign: center;
+              halign: center;
+              action-name: "recording.seek-backward";
+              receives-default: true;
+              tooltip-text: _("Seek 10s Backward");
+              icon-name: "skip-back-symbolic";
+
+              styles [
+                "circular",
+              ]
+            }
+
+            Stack playbackStack {
+              StackPage {
+                name: "play";
+
+                child: Button playBtn {
+                  valign: center;
+                  halign: center;
+                  receives-default: true;
+                  action-name: "recording.play";
+                  tooltip-text: _("Play");
+
+                  Image {
+                    icon-name: "media-playback-start-symbolic";
+                    pixel-size: 24;
+                  }
+
+                  styles [
+                    "circular",
+                    "large",
+                  ]
+                };
+              }
+
+              StackPage {
+                name: "pause";
+
+                child: Button pauseBtn {
+                  valign: center;
+                  halign: center;
+                  action-name: "recording.pause";
+                  receives-default: true;
+                  tooltip-text: _("Pause");
+
+                  Image {
+                    icon-name: "media-playback-pause-symbolic";
+                    pixel-size: 24;
+                  }
+
+                  styles [
+                    "circular",
+                    "large",
+                  ]
+                };
+              }
+            }
+
+            Button {
+              valign: center;
+              halign: center;
+              action-name: "recording.seek-forward";
+              receives-default: true;
+              tooltip-text: _("Seek 10s Forward");
+              icon-name: "skip-forward-symbolic";
+
+              styles [
+                "circular",
+              ]
+            }
+          }
+
+          Stack rightStack {
+            hexpand: true;
+            halign: end;
+
+            StackPage {
+              name: "options";
+
+              child: Adw.Squeezer {
+                homogeneous: true;
+
+                Box {
+                  spacing: 8;
+
+                  Button {
+                    valign: center;
+                    halign: center;
+                    receives-default: true;
+                    tooltip-text: _("Export");
+                    action-name: "recording.export";
+                    icon-name: "document-save-symbolic";
+
+                    styles [
+                      "circular",
+                    ]
+                  }
+
+                  Button {
+                    valign: center;
+                    halign: center;
+                    receives-default: true;
+                    tooltip-text: _("Rename");
+                    action-name: "recording.rename";
+                    icon-name: "document-edit-symbolic";
+
+                    styles [
+                      "circular",
+                    ]
+                  }
+                }
+
+                MenuButton {
+                  receives-default: true;
+                  menu-model: optionMenu;
+                  halign: end;
+                  valign: center;
+                  icon-name: "view-more-symbolic";
+
+                  styles [
+                    "circular",
+                  ]
+                }
+              };
+            }
+
+            StackPage {
+              name: "save";
+
+              child: Button saveBtn {
+                valign: center;
+                halign: end;
+                receives-default: false;
+                tooltip-text: _("Save");
+                action-name: "recording.save";
+                icon-name: "emblem-ok-symbolic";
+
+                styles [
+                  "circular",
+                  "suggested-action",
+                ]
+              };
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+menu optionMenu {
+  section {
+    item {
+      action: "recording.rename";
+      label: _("Rename");
+    }
+
+    item {
+      action: "recording.export";
+      label: _("Export");
+    }
+  }
+}
+
+SizeGroup {
+  widgets [
+    rightStack,
+    deleteBtnBox,
+  ]
+}

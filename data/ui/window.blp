@@ -1,0 +1,137 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $VocalisWindow: Adw.ApplicationWindow {
+  width-request: 360;
+  height-request: 480;
+  hexpand: true;
+  vexpand: true;
+  default-width: 780;
+  default-height: 480;
+  title: _("Vocalis");
+
+  Adw.ToolbarView toolbarView {
+    [top]
+    Adw.HeaderBar {
+      Button {
+        receives-default: false;
+        halign: center;
+        valign: center;
+        action-name: "recorder.start";
+
+        Adw.ButtonContent {
+          icon-name: "media-record-symbolic";
+          label: _("Record");
+        }
+
+        styles [
+          "suggested-action",
+        ]
+      }
+
+      [end]
+      MenuButton {
+        receives-default: false;
+        menu-model: primaryMenu;
+        icon-name: "open-menu-symbolic";
+        tooltip-text: _("Main Menu");
+
+        styles [
+          "image-button",
+        ]
+      }
+    }
+
+    Adw.ToastOverlay toastOverlay {
+      child: Stack mainStack {
+        hexpand: true;
+        vexpand: true;
+
+        StackPage {
+          name: "empty";
+
+          child: Adw.StatusPage emptyPage {
+            title: _("Add Recordings");
+            description: _("Use the <b>Record</b> button to make sound recordings");
+          };
+        }
+
+        StackPage {
+          name: "recordings";
+
+          child: ScrolledWindow {
+            hexpand: true;
+            vexpand: true;
+            hscrollbar-policy: never;
+
+            child: Viewport {
+              scroll-to-focus: true;
+
+              child: Adw.Clamp column {
+                maximum-size: 650;
+              };
+            };
+          };
+        }
+      };
+    }
+  }
+}
+
+menu primaryMenu {
+  submenu {
+    label: _("Preferred Format");
+
+    item {
+      label: _("Vorbis");
+      action: "app.audio-profile";
+      target: "vorbis";
+    }
+
+    item {
+      label: _("Opus");
+      action: "app.audio-profile";
+      target: "opus";
+    }
+
+    item {
+      label: _("FLAC");
+      action: "app.audio-profile";
+      target: "flac";
+    }
+
+    item {
+      label: _("MP3");
+      action: "app.audio-profile";
+      target: "mp3";
+    }
+  }
+
+  submenu {
+    label: _("Audio Channel");
+
+    item {
+      label: _("Stereo");
+      action: "app.audio-channel";
+      target: "stereo";
+    }
+
+    item {
+      label: _("Mono");
+      action: "app.audio-channel";
+      target: "mono";
+    }
+  }
+
+  section {
+    item {
+      label: _("_Keyboard Shortcuts");
+      action: "win.show-help-overlay";
+    }
+
+    item {
+      action: "app.about";
+      label: _("About Vocalis");
+    }
+  }
+}
